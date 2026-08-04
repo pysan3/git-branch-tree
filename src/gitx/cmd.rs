@@ -104,6 +104,21 @@ impl Git {
         collect("git", args, &out.status, out.stdout, out.stderr)
     }
 
+    /// Run `git <args>` in `dir` for the test runner: no editor may ever open (a rebase
+    /// would hang waiting for one) and git's own chatter is discarded so it cannot drown
+    /// the user's test output. Returns only whether it succeeded.
+    pub fn ok_in_noninteractive(&self, dir: &Path, args: &[&str]) -> bool {
+        Command::new("git")
+            .args(args)
+            .current_dir(dir)
+            .env("GIT_EDITOR", "true")
+            .env("GIT_SEQUENCE_EDITOR", "true")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
     /// Run `gh <args>` (GitHub CLI) and return its trimmed stdout.
     pub fn gh(&self, args: &[&str]) -> anyhow::Result<String> {
         let out = Command::new("gh")

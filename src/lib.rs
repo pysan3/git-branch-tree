@@ -22,4 +22,5 @@ pub mod patchid;
 pub mod plan;
 pub mod render;
 pub mod suffix;
+pub mod testrun;
 pub mod util;

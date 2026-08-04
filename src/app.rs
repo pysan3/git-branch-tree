@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use crate::base::{detect_base, update_base};
 use crate::blame::SubprocessBlamer;
@@ -21,6 +21,7 @@ use crate::model::build_branches;
 use crate::patchid::{PatchId, PatchIdCache, patch_id_backend};
 use crate::plan::{PlanEntry, rebase_plan};
 use crate::render::{render_ascii, render_header, render_mermaid, render_rebase};
+use crate::testrun::run_tests;
 
 pub fn run(cli: Cli) -> Result<()> {
     // Resolve the suffix templates before touching git, so a bad placeholder fails
@@ -83,7 +84,10 @@ pub fn run(cli: Cli) -> Result<()> {
     merged.retain(|m| set.by_name(m).is_some());
     let merged_set: HashSet<String> = merged.iter().cloned().collect();
 
+    // Tests run BEFORE the report is printed: they may write a lot of output, and the
+    // tree and rebase block should land at the bottom of the terminal, not be buried.
     let mut plan: Vec<PlanEntry> = Vec::new();
+    let mut failed: HashMap<String, String> = HashMap::new();
     if !cli.no_rebase {
         // Patch-ids of everything already merged, so the rebase `up` skips all of it.
         let merged_pids: BTreeSet<PatchId> = set
@@ -92,6 +96,28 @@ pub fn run(cli: Cli) -> Result<()> {
             .flat_map(|b| set.get(b).pidset.iter().copied())
             .collect();
         plan = rebase_plan(&set, &base, &merged_set, &merged_pids);
+
+        if let Some(cmd) = &cli.test {
+            let patch = match &cli.test_patch {
+                Some(p) => {
+                    let abs = std::path::absolute(p).unwrap_or_else(|_| p.clone());
+                    if !abs.is_file() {
+                        bail!("--test-patch file not found: {}", p.display());
+                    }
+                    Some(abs)
+                }
+                None => None,
+            };
+            failed = run_tests(
+                &set,
+                &plan,
+                &base,
+                &git,
+                cmd,
+                cli.test_job_count(),
+                patch.as_deref(),
+            )?;
+        }
     }
 
     print!("{}", render_header(&set, &base, &auto));
@@ -111,7 +137,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 &base,
                 &merged_set,
                 cli.skip_ambiguous,
-                &HashMap::new(),
+                &failed,
                 &suffixes,
             )
         );

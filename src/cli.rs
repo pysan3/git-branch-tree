@@ -3,6 +3,8 @@
 //! No colour anywhere: the report is meant to be copy-pasted (the rebase block in
 //! particular), and escape codes would come along for the ride.
 
+use std::path::PathBuf;
+
 use clap::{Parser, ValueEnum};
 
 use crate::suffix::{SuffixConfig, SuffixTemplate};
@@ -120,6 +122,23 @@ pub struct Cli {
     #[arg(long)]
     pub skip_ambiguous: bool,
 
+    /// shell command run against base+branch for each branch that would land on the
+    /// base; if it exits non-zero the branch is omitted from the rebase block and listed
+    /// (catches semantic deps - e.g. calling code from an unmerged branch)
+    #[arg(long, value_name = "CMD")]
+    pub test: Option<String>,
+
+    /// worker count for --test (default: -j). Use 1 to run tests serially, e.g. so they
+    /// can safely share a single Bazel --output_base; prefer a shared --disk_cache
+    /// instead, which reuses artifacts while staying parallel
+    #[arg(long, value_name = "N")]
+    pub test_jobs: Option<usize>,
+
+    /// git-apply this patch to each worktree after the rebase and before --test (local,
+    /// uncommitted fixes - e.g. machine-specific - that make tests pass)
+    #[arg(long, value_name = "PATH")]
+    pub test_patch: Option<PathBuf>,
+
     /// do not update the base from origin before analysing (offline / local base)
     #[arg(long)]
     pub no_fetch: bool,
@@ -144,6 +163,11 @@ impl Cli {
     /// At least one worker, however the flag was given.
     pub fn job_count(&self) -> usize {
         self.jobs.max(1)
+    }
+
+    /// Workers for `--test`, defaulting to `-j`.
+    pub fn test_job_count(&self) -> usize {
+        self.test_jobs.unwrap_or(self.jobs).max(1)
     }
 
     /// `--merged` accepts both space- and comma-separated names, so the flag can be
