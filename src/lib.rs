@@ -7,6 +7,7 @@
 //! changes - not git ancestry - so it is robust to rebases and squash-merges (where
 //! the same change gets a different commit hash).
 
+pub mod gitx;
 pub mod util;
 
 /// Run the whole pipeline. The binary maps `Err` to `error: ...` on stderr + exit 1.
