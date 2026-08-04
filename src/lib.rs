@@ -9,6 +9,8 @@
 
 pub mod base;
 pub mod gitx;
+pub mod input;
+pub mod model;
 pub mod patchid;
 pub mod util;
 

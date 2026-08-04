@@ -1,0 +1,126 @@
+//! Input mode resolution: turn CLI branch args / prefixes into concrete branch names.
+
+use std::collections::BTreeSet;
+
+use anyhow::{Result, bail};
+
+use crate::gitx::{RepoView, Sha};
+use crate::model::prime_names;
+use crate::patchid::{PatchId, PatchIdCache};
+
+/// Leading run of ASCII letters, e.g. `PROJ-412` -> `PROJ`, `pysan3/foo` -> `pysan`.
+pub fn alpha_key(s: &str) -> &str {
+    let end = s
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(s.len());
+    &s[..end]
+}
+
+/// Whether `branch` matches any of `prefixes` (literal, or by leading-letter group).
+pub fn prefix_matches(branch: &str, prefixes: &[String], alpha: bool) -> bool {
+    if alpha {
+        let key = alpha_key(branch);
+        prefixes.iter().any(|p| alpha_key(p) == key)
+    } else {
+        prefixes.iter().any(|p| branch.starts_with(p.as_str()))
+    }
+}
+
+/// Resolve the concrete list of branch names to analyse.
+///
+/// - `--prefix P...`: every local branch matching any prefix (or `--alpha` group).
+/// - one branch: that branch plus every local branch stacked on it — i.e. carrying
+///   all of its changes *by content* (patch-ids), not by ancestry.
+/// - several branches: exactly those, deduped, order kept.
+pub fn resolve_branches(
+    branches: &[String],
+    prefixes: &[String],
+    alpha: bool,
+    base: Sha,
+    repo: &RepoView,
+    cache: &PatchIdCache,
+    pool: &rayon::ThreadPool,
+) -> Result<Vec<String>> {
+    let locals = repo.local_branches()?;
+
+    if !prefixes.is_empty() {
+        let names: Vec<String> = locals
+            .iter()
+            .filter(|b| prefix_matches(b, prefixes, alpha))
+            .cloned()
+            .collect();
+        if names.is_empty() {
+            let how = if alpha {
+                "leading-letter group"
+            } else {
+                "prefix(es)"
+            };
+            bail!("no local branches match {how}: {}", prefixes.join(", "));
+        }
+        return Ok(names);
+    }
+
+    if branches.len() == 1 {
+        let root = &branches[0];
+        if !repo.branch_exists(root) {
+            bail!("branch '{root}' does not exist");
+        }
+        // One batched patch-id pass over every local branch, then subset tests.
+        let lists = prime_names(repo, base, &locals, cache, pool)?;
+        let patchset = |name: &str| -> BTreeSet<PatchId> {
+            lists
+                .get(name)
+                .into_iter()
+                .flatten()
+                .filter_map(|&s| cache.get(s))
+                .collect()
+        };
+        let root_pids = patchset(root);
+        let mut result: BTreeSet<&str> = BTreeSet::from([root.as_str()]);
+        // b is stacked on root iff it carries all of root's changes (content, not sha).
+        for b in &locals {
+            if b != root && !root_pids.is_empty() && root_pids.is_subset(&patchset(b)) {
+                result.insert(b);
+            }
+        }
+        return Ok(result.into_iter().map(String::from).collect());
+    }
+
+    if branches.len() >= 2 {
+        let mut seen = BTreeSet::new();
+        let mut names = Vec::new();
+        for b in branches {
+            if !repo.branch_exists(b) {
+                bail!("branch '{b}' does not exist");
+            }
+            if seen.insert(b.as_str()) {
+                names.push(b.clone());
+            }
+        }
+        return Ok(names);
+    }
+
+    bail!("no branches given; pass branch name(s) or --prefix")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alpha_key_takes_leading_letters() {
+        assert_eq!(alpha_key("PROJ-412"), "PROJ");
+        assert_eq!(alpha_key("pysan3/foo"), "pysan");
+        assert_eq!(alpha_key("123-x"), "");
+    }
+
+    #[test]
+    fn prefix_matching_literal_and_alpha() {
+        let prefixes = vec!["PROJ-41".to_string(), "OPS-7".to_string()];
+        assert!(prefix_matches("PROJ-412/feat", &prefixes, false));
+        assert!(!prefix_matches("PROJ-500/feat", &prefixes, false));
+        assert!(prefix_matches("PROJ-500/feat", &prefixes, true));
+        assert!(prefix_matches("OPS-999", &prefixes, true));
+        assert!(!prefix_matches("OTHER-1", &prefixes, true));
+    }
+}
