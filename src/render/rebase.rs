@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::model::BranchSet;
 use crate::plan::PlanEntry;
 use crate::suffix::{SuffixConfig, SuffixCtx};
-use crate::util::short;
+use crate::util::{shell_quote, short};
 
 /// Emit the `git rebase --onto` block that flattens the stack onto the base.
 ///
@@ -90,11 +90,16 @@ pub fn render_rebase(
         // Rebase, then push the rewritten branch, then whatever the user configured for
         // this landing kind: by default a branch reaching the base is ready to ship,
         // while one landing on a parent is a stacked PR needing its base retargeted.
+        // Every ref reaching the shell is quoted if it needs it: git allows `;`, `$(..)`
+        // and backticks in ref names, and this block is meant to be pasted and run.
         let up = entry.up.to_string();
+        let q_name = shell_quote(name);
+        let q_onto = shell_quote(&entry.onto);
+        let q_base = shell_quote(base);
+        let q_up = shell_quote(short(&up));
         let mut cmd = format!(
-            "git rebase --onto {} {} {name} && git checkout {name} && git push --force-with-lease",
-            entry.onto,
-            short(&up),
+            "git rebase --onto {q_onto} {q_up} {q_name} \
+             && git checkout {q_name} && git push --force-with-lease",
         );
         let templates = if entry.onto == base {
             &suffixes.on_base
@@ -102,10 +107,10 @@ pub fn render_rebase(
             &suffixes.on_parent
         };
         let ctx = SuffixCtx {
-            branch: name,
-            onto: &entry.onto,
-            base,
-            up: short(&up),
+            branch: &q_name,
+            onto: &q_onto,
+            base: &q_base,
+            up: &q_up,
         };
         for t in templates {
             cmd.push_str(" && ");

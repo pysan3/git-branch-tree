@@ -859,6 +859,7 @@ dependencies = [
  "glob",
  "octocrab",
  "rayon",
+ "shlex",
  "tempfile",
  "thiserror",
  "tokio",

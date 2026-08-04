@@ -306,6 +306,35 @@ fn braces_can_be_escaped_in_a_suffix() {
 }
 
 #[test]
+fn a_hostile_branch_name_cannot_inject_shell_commands() {
+    // git allows `;` and `$(...)` in ref names, and the rebase block is meant to be
+    // pasted into a shell - so a branch fetched from an untrusted fork must not be able
+    // to smuggle commands into it.
+    let r = TestRepo::new();
+    r.commit_file("f.txt", "l1\nl2\nl3\n", "chore: seed");
+    r.branch_from("feat/base", "main");
+    r.commit_file("f.txt", "B1\nl2\nl3\n", "feat: base");
+    r.branch_from("feat/x;id", "feat/base");
+    r.commit_file("f.txt", "X1\nl2\nl3\n", "feat: evil");
+    r.checkout("main");
+
+    let out = run(&r, &["--format", "ascii", "feat/base", "feat/x;id"]);
+    // The name reaches every command as one quoted literal, never as shell syntax.
+    // (util::shell_quote's own tests prove the round trip against a real shell.)
+    assert!(out.contains("git checkout 'feat/x;id'"), "{out}");
+    assert!(
+        !out.contains("git checkout feat/x;id"),
+        "an unquoted name would run `id` on paste:\n{out}"
+    );
+    assert!(
+        !out.contains("gh pr edit feat/x;id"),
+        "the suffix command must quote it too:\n{out}"
+    );
+    // The tree is not shell, so it shows the plain name.
+    assert!(out.contains("└─ feat/x;id"), "{out}");
+}
+
+#[test]
 fn runs_from_a_subdirectory() {
     // The tool discovers the repository upward, so it works anywhere inside it.
     let r = diamond();
