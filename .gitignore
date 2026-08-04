@@ -1,0 +1,5 @@
+/target
+
+# Editor / local tooling state
+/.vim/
+/.claude/settings.local.json
