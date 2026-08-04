@@ -7,6 +7,7 @@
 //! changes - not git ancestry - so it is robust to rebases and squash-merges (where
 //! the same change gets a different commit hash).
 
+pub mod base;
 pub mod gitx;
 pub mod util;
 
