@@ -9,6 +9,7 @@
 
 pub mod base;
 pub mod gitx;
+pub mod patchid;
 pub mod util;
 
 /// Run the whole pipeline. The binary maps `Err` to `error: ...` on stderr + exit 1.
