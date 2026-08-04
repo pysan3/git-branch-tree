@@ -110,6 +110,11 @@ pub struct Cli {
     #[arg(long)]
     pub no_default_exclude: bool,
 
+    /// also treat as --merged any analysed branch whose GitHub PR is already merged
+    /// (via `gh pr list`; needs the gh CLI + network)
+    #[arg(long)]
+    pub auto_merged: bool,
+
     /// omit branches that depend on >1 still-unmerged parent from the rebase block
     /// (they cannot be rebased onto a single branch); list them as a comment
     #[arg(long)]

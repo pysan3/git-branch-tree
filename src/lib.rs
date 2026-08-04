@@ -13,6 +13,7 @@ pub mod blame;
 pub mod cli;
 pub mod deps;
 pub mod exclude;
+pub mod github;
 pub mod gitx;
 pub mod hunks;
 pub mod input;

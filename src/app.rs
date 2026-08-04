@@ -14,6 +14,7 @@ use crate::blame::SubprocessBlamer;
 use crate::cli::Cli;
 use crate::deps::{compute_ancestry_dependencies, compute_dependencies};
 use crate::exclude::ExcludeSet;
+use crate::github::detect_merged_prs;
 use crate::gitx::{Git, RepoView};
 use crate::input::resolve_branches;
 use crate::model::build_branches;
@@ -56,6 +57,16 @@ pub fn run(cli: Cli) -> Result<()> {
         &pool,
     )?;
 
+    // Ask GitHub before building the graph, so a network failure costs nothing.
+    let mut auto: Vec<String> = Vec::new();
+    if cli.auto_merged {
+        auto = detect_merged_prs(&git, &names)?
+            .into_iter()
+            .filter(|n| !merged.contains(n))
+            .collect();
+        merged.extend(auto.iter().cloned());
+    }
+
     let mut set = build_branches(&names, base_sha, &repo, &cache, &pool)?;
     if cli.ancestry {
         compute_ancestry_dependencies(&mut set, &repo, &pool)?;
@@ -83,7 +94,7 @@ pub fn run(cli: Cli) -> Result<()> {
         plan = rebase_plan(&set, &base, &merged_set, &merged_pids);
     }
 
-    print!("{}", render_header(&set, &base, &[]));
+    print!("{}", render_header(&set, &base, &auto));
     println!("\n");
     if cli.wants_mermaid() {
         println!("{}\n", render_mermaid(&set, &base, &merged_set));
