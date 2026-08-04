@@ -8,7 +8,10 @@
 //! the same change gets a different commit hash).
 
 pub mod base;
+pub mod blame;
+pub mod exclude;
 pub mod gitx;
+pub mod hunks;
 pub mod input;
 pub mod model;
 pub mod patchid;
