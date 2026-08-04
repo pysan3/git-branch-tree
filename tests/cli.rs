@@ -212,6 +212,100 @@ fn errors_go_to_stderr_with_exit_one() {
 }
 
 #[test]
+fn suffix_commands_are_configurable() {
+    let r = diamond();
+
+    // Replacing both sides: the templates expand per branch and landing kind.
+    let out = run(
+        &r,
+        &[
+            "--format",
+            "ascii",
+            "--no-rebase",
+            "feat/root",
+            "--on-base",
+            "unused",
+        ],
+    );
+    assert!(out.contains("# base: main"), "{out}");
+
+    let mut args = vec!["--format", "ascii"];
+    args.extend_from_slice(ALL);
+    args.extend_from_slice(&[
+        "--on-base",
+        "ship {branch} onto {base}",
+        "--on-parent",
+        "retarget {branch} -> {onto}",
+    ]);
+    let out = run(&r, &args);
+    assert!(
+        out.contains("&& git push --force-with-lease && ship feat/left onto main \\"),
+        "{out}"
+    );
+    assert!(
+        out.contains("&& git push --force-with-lease && retarget feat/top -> feat/right \\"),
+        "{out}"
+    );
+    // The defaults are gone, not appended to.
+    assert!(!out.contains("&& review"), "{out}");
+    assert!(!out.contains("gh pr edit"), "{out}");
+}
+
+#[test]
+fn repeating_a_suffix_flag_chains_several_commands() {
+    let r = diamond();
+    let mut args = vec!["--format", "ascii"];
+    args.extend_from_slice(ALL);
+    args.extend_from_slice(&["--on-base", "first {branch}", "--on-base", "second {up}"]);
+    let out = run(&r, &args);
+    assert!(
+        out.contains("&& first feat/left && second <SHA> \\"),
+        "{out}"
+    );
+}
+
+#[test]
+fn an_empty_suffix_appends_nothing() {
+    let r = diamond();
+    let mut args = vec!["--format", "ascii"];
+    args.extend_from_slice(ALL);
+    args.extend_from_slice(&["--on-base", "", "--on-parent", ""]);
+    let out = run(&r, &args);
+    assert!(
+        out.contains("&& git rebase --onto main <SHA> feat/left && git checkout feat/left && git push --force-with-lease \\"),
+        "{out}"
+    );
+    assert!(!out.contains("&& review"), "{out}");
+}
+
+#[test]
+fn a_bad_placeholder_is_rejected_before_any_git_work() {
+    let r = diamond();
+    let assert = Command::cargo_bin("git-branch-tree")
+        .unwrap()
+        .current_dir(&r.dir)
+        .args(["--no-fetch", "feat/root", "--on-base", "echo {nope}"])
+        .assert()
+        .failure();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    assert!(stderr.contains("unknown placeholder '{nope}'"), "{stderr}");
+    assert!(
+        stderr.contains("{branch}, {onto}, {base}, {up}"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn braces_can_be_escaped_in_a_suffix() {
+    let r = diamond();
+    let mut args = vec!["--format", "ascii"];
+    args.extend_from_slice(ALL);
+    args.extend_from_slice(&["--on-base", "jq '{{n: 1}}' # {branch}"]);
+    let out = run(&r, &args);
+    assert!(out.contains("&& jq '{n: 1}' # feat/left \\"), "{out}");
+}
+
+#[test]
 fn runs_from_a_subdirectory() {
     // The tool discovers the repository upward, so it works anywhere inside it.
     let r = diamond();

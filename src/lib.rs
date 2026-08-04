@@ -20,4 +20,5 @@ pub mod model;
 pub mod patchid;
 pub mod plan;
 pub mod render;
+pub mod suffix;
 pub mod util;

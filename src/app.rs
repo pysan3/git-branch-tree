@@ -22,6 +22,10 @@ use crate::plan::{PlanEntry, rebase_plan};
 use crate::render::{render_ascii, render_header, render_mermaid, render_rebase};
 
 pub fn run(cli: Cli) -> Result<()> {
+    // Resolve the suffix templates before touching git, so a bad placeholder fails
+    // immediately rather than after a minute of blame.
+    let suffixes = cli.suffixes()?;
+
     let cwd = std::env::current_dir().context("cannot read the current directory")?;
     let repo = RepoView::discover(&cwd)?;
     let workdir = repo.work_dir()?;
@@ -97,6 +101,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 &merged_set,
                 cli.skip_ambiguous,
                 &HashMap::new(),
+                &suffixes,
             )
         );
     }

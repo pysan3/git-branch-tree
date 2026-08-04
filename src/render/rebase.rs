@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::model::BranchSet;
 use crate::plan::PlanEntry;
+use crate::suffix::{SuffixConfig, SuffixCtx};
 use crate::util::short;
 
 /// Emit the `git rebase --onto` block that flattens the stack onto the base.
@@ -22,6 +23,7 @@ pub fn render_rebase(
     merged: &HashSet<String>,
     skip_ambiguous: bool,
     failed: &HashMap<String, String>,
+    suffixes: &SuffixConfig,
 ) -> String {
     let mut notes: Vec<String> = Vec::new();
     let mut cmds: Vec<String> = Vec::new();
@@ -85,19 +87,29 @@ pub fn render_rebase(
                 entry.onto
             ));
         }
-        // Rebase, then push the rewritten branch. A branch that lands on the base is
-        // ready to ship (review); one that lands on a parent is a stacked PR whose base
-        // branch on GitHub must be retargeted to that parent.
+        // Rebase, then push the rewritten branch, then whatever the user configured for
+        // this landing kind: by default a branch reaching the base is ready to ship,
+        // while one landing on a parent is a stacked PR needing its base retargeted.
         let up = entry.up.to_string();
         let mut cmd = format!(
             "git rebase --onto {} {} {name} && git checkout {name} && git push --force-with-lease",
             entry.onto,
             short(&up),
         );
-        if entry.onto == base {
-            cmd.push_str(" && review");
+        let templates = if entry.onto == base {
+            &suffixes.on_base
         } else {
-            cmd.push_str(&format!(" && gh pr edit {name} --base {}", entry.onto));
+            &suffixes.on_parent
+        };
+        let ctx = SuffixCtx {
+            branch: name,
+            onto: &entry.onto,
+            base,
+            up: short(&up),
+        };
+        for t in templates {
+            cmd.push_str(" && ");
+            cmd.push_str(&t.expand(&ctx));
         }
         cmds.push(cmd);
     }

@@ -5,6 +5,8 @@
 
 use clap::{Parser, ValueEnum};
 
+use crate::suffix::{SuffixConfig, SuffixTemplate};
+
 /// Which tree rendering(s) to print.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub enum Format {
@@ -120,6 +122,17 @@ pub struct Cli {
     /// do not print the rebase command block
     #[arg(long)]
     pub no_rebase: bool,
+
+    /// command appended with `&&` for each branch landing on the base (repeatable;
+    /// replaces the default `review`). Placeholders: {branch} {onto} {base} {up};
+    /// {{ and }} are literal braces. Pass an empty value to append nothing
+    #[arg(long = "on-base", value_name = "CMD")]
+    pub on_base: Option<Vec<SuffixTemplate>>,
+
+    /// command appended with `&&` for each branch landing on a still-open parent
+    /// (repeatable; replaces the default `gh pr edit {branch} --base {onto}`)
+    #[arg(long = "on-parent", value_name = "CMD")]
+    pub on_parent: Option<Vec<SuffixTemplate>>,
 }
 
 impl Cli {
@@ -145,6 +158,12 @@ impl Cli {
 
     pub fn wants_mermaid(&self) -> bool {
         matches!(self.format, Format::Mermaid | Format::Both)
+    }
+
+    /// The per-branch suffix commands, defaults applied. Templates were already
+    /// validated by clap, so this cannot fail on a bad placeholder.
+    pub fn suffixes(&self) -> anyhow::Result<SuffixConfig> {
+        SuffixConfig::from_cli(self.on_base.as_deref(), self.on_parent.as_deref())
     }
 }
 
