@@ -7,8 +7,10 @@
 //! changes - not git ancestry - so it is robust to rebases and squash-merges (where
 //! the same change gets a different commit hash).
 
+pub mod app;
 pub mod base;
 pub mod blame;
+pub mod cli;
 pub mod deps;
 pub mod exclude;
 pub mod gitx;
@@ -16,10 +18,6 @@ pub mod hunks;
 pub mod input;
 pub mod model;
 pub mod patchid;
+pub mod plan;
 pub mod render;
 pub mod util;
-
-/// Run the whole pipeline. The binary maps `Err` to `error: ...` on stderr + exit 1.
-pub fn run() -> anyhow::Result<()> {
-    anyhow::bail!("not implemented yet")
-}

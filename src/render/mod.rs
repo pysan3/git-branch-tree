@@ -1,4 +1,4 @@
-//! Renderers: report header, ASCII tree and Mermaid graph.
+//! Renderers: report header, ASCII tree, Mermaid graph, rebase command block.
 //!
 //! Both tree renderers are merged-aware: an already-merged branch is omitted (it
 //! *is* the base now) and any open branch that depended only on merged branches
@@ -6,6 +6,7 @@
 
 pub mod ascii;
 pub mod mermaid;
+pub mod rebase;
 
 use std::collections::HashSet;
 
@@ -13,6 +14,7 @@ use crate::model::{BranchId, BranchSet};
 
 pub use ascii::render_ascii;
 pub use mermaid::render_mermaid;
+pub use rebase::render_rebase;
 
 /// Dependency parents excluding merged ones (which have collapsed into the base).
 pub(crate) fn display_parents(
