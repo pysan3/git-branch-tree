@@ -9,6 +9,7 @@
 
 pub mod base;
 pub mod blame;
+pub mod deps;
 pub mod exclude;
 pub mod gitx;
 pub mod hunks;
