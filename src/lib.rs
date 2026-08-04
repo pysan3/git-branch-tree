@@ -16,6 +16,7 @@ pub mod hunks;
 pub mod input;
 pub mod model;
 pub mod patchid;
+pub mod render;
 pub mod util;
 
 /// Run the whole pipeline. The binary maps `Err` to `error: ...` on stderr + exit 1.
