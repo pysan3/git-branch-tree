@@ -1,0 +1,7 @@
+[files]
+# Cargo.lock is generated; the changelog is generated from commit subjects.
+extend-exclude = ["Cargo.lock", "CHANGELOG.md"]
+
+[default.extend-words]
+# `anc` is this codebase's abbreviation for "ancestor", as in `is_ancestor(anc, desc)`.
+anc = "anc"

@@ -121,7 +121,7 @@ fn editing_a_base_owned_line_is_not_a_dependency() {
 }
 
 #[test]
-fn carrying_another_branchs_new_file_without_ancestry_is_a_dependency() {
+fn carrying_a_second_branch_new_file_without_ancestry_is_a_dependency() {
     // Content containment: feat/carrier cherry-picked feat/seed's new file, so it is
     // not a git descendant, yet it cannot land before feat/seed does.
     let r = TestRepo::new();
