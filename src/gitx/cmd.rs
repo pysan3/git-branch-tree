@@ -4,8 +4,8 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-/// A failed subprocess, rendered like the Python original:
-/// `git <args> failed (<code>): <stderr>`.
+/// A failed subprocess, rendered as `git <args> failed (<code>): <stderr>` so the
+/// failing command is reproducible by hand from the message alone.
 #[derive(Debug, thiserror::Error)]
 #[error("{program} {args} failed ({status}):\n{stderr}")]
 pub struct CmdError {

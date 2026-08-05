@@ -39,15 +39,9 @@ the fixtures are milliseconds each. If you touch the dependency engine or a rend
 a fixture that shows the shape you fixed; several of the trickier cases (the diamond, the
 squash-merge skip point) exist because an invented expectation turned out to be wrong.
 
-Output is pinned byte for byte on purpose. If a change alters the report, that is a
-deliberate decision to make explicit in the commit message, not incidental drift.
-
-There is also a comparison harness against the original Python implementation, skipped
-unless you point it at that script:
-
-```sh
-GBT_PYTHON=/path/to/git-branch-tree cargo test --test golden_python -- --ignored
-```
+Output is pinned byte for byte on purpose — the rebase block gets pasted into a shell, so
+a change to it is a change to what people run. If a change alters the report, that is a
+deliberate decision to state in the commit message, not incidental drift.
 
 ## Scope
 

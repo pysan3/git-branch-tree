@@ -126,6 +126,61 @@ fn merged_branches_are_skipped_and_noted() {
 }
 
 #[test]
+fn a_squash_merge_sets_the_skip_point_by_content() {
+    // The subtlest part of the planner. A squash-merge lands feat/landed's code in main
+    // under a brand-new hash, so feat/next still carries the original commit above the
+    // base. Replaying it would conflict with the squashed version, so the rebase has to
+    // start *after* it - and that skip point can only be found by patch-id, since no
+    // sha is shared between the branch and what landed.
+    let r = TestRepo::new();
+    r.commit_file("f.txt", "l1\nl2\nl3\n", "chore: seed");
+    r.branch_from("feat/landed", "main");
+    r.commit_file("f.txt", "A1\nl2\nl3\n", "feat: landed");
+    let landed_tip = r.sha("feat/landed");
+    r.branch_from("feat/next", "feat/landed");
+    r.commit_file("f.txt", "A1\nB2\nl3\n", "feat: next");
+    r.squash_merge_into_main("feat/landed");
+
+    // Deliberately not normalised: the exact skip commit is the assertion.
+    let out = String::from_utf8(
+        Command::cargo_bin("git-branch-tree")
+            .unwrap()
+            .current_dir(&r.dir)
+            .args([
+                "--no-fetch",
+                "--format",
+                "ascii",
+                "feat/landed",
+                "feat/next",
+                "--merged",
+                "feat/landed",
+            ])
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .unwrap();
+
+    // The landed branch is the base now: gone from the tree, noted as skipped.
+    assert!(
+        out.contains("# squash-merged branches skipped: feat/landed"),
+        "{out}"
+    );
+    assert!(!out.contains("├─ feat/landed"), "{out}");
+    // feat/next replays onto the base starting after the commit that already landed.
+    assert!(
+        out.contains(&format!(
+            "git rebase --onto main {} feat/next",
+            &landed_tip[..10]
+        )),
+        "skip point should be feat/landed's original tip {}:\n{out}",
+        &landed_tip[..10]
+    );
+}
+
+#[test]
 fn a_single_branch_pulls_in_its_whole_stack() {
     let r = diamond();
     let out = run(&r, &["--format", "ascii", "feat/root"]);

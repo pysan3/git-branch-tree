@@ -1,8 +1,8 @@
 //! The branch model: per-branch content identity and the dependency graph arena.
 //!
-//! Graph edges are `BranchId` indices into a [`BranchSet`] (the Rust analogue of the
-//! Python original's object-identity edges): `Copy` ids, deterministic `BTreeSet`
-//! ordering, and free `Send`/`Sync` for the parallel phases.
+//! Graph edges are `BranchId` indices into a [`BranchSet`] rather than pointers between
+//! nodes: `Copy` ids, deterministic `BTreeSet` ordering so the rendered tree never
+//! shuffles between runs, and `Send`/`Sync` for free in the parallel phases.
 
 use std::collections::{BTreeSet, HashMap};
 
