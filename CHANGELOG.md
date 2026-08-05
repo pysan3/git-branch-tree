@@ -12,7 +12,17 @@ them by hand.
 
 ## [Unreleased]
 
-## [0.2.2](https://github.com/pysan3/git-branch-tree/compare/v0.2.1...v0.2.2) - 2026-08-05
+## [1.0.0](https://github.com/pysan3/git-branch-tree/compare/v0.2.1...v1.0.0) - 2026-08-05
+
+The licence changes from MIT to **MPL-2.0** from this release onward. Versions up to and
+including 0.2.1 remain MIT on crates.io, since published releases are immutable.
+
+MPL-2.0 is file-scoped: this can still be combined with code under other licences,
+including proprietary code, and only changes to *these* files have to be shared back.
+
+Released as 1.0.0 rather than a patch because a licence change is something users must
+notice. The version now speaks for the command line - its flags, its output, and the
+rebase block it emits; there is no library target and so no API surface to promise.
 
 ### Other
 
