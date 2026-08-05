@@ -44,8 +44,13 @@ lto = "thin"
 # Stated explicitly rather than relying on cargo-binstall's inference, so the archive
 # names release.yml uploads and the ones binstall fetches cannot drift apart.
 [package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-suffix }"
+# The extension is written out rather than taken from `{ archive-suffix }`: that
+# expands with its own leading dot, and for pkg-fmt tgz it is `.tgz`, neither of which
+# matches the `.tar.gz` the upload job produces. Getting it wrong is invisible - binstall
+# just falls back to building from source, which is exactly what it exists to avoid.
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.gz"
 pkg-fmt = "tgz"
 
 [package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
 pkg-fmt = "zip"
