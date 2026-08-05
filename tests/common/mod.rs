@@ -194,7 +194,7 @@ use git_branch_tree::deps::{Engine, compute_ancestry_dependencies};
 use git_branch_tree::exclude::ExcludeSet;
 use git_branch_tree::gitx::{Git, RepoView};
 use git_branch_tree::model::{BranchSet, build_branches};
-use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
+use git_branch_tree::patchid::PatchIdCache;
 
 /// The collaborators the pipeline needs, assembled once per fixture.
 pub struct Harness {
@@ -209,7 +209,7 @@ impl Harness {
         let git = Git::new(&r.dir);
         Self {
             repo: RepoView::discover(&r.dir).expect("open repo"),
-            cache: PatchIdCache::new(patch_id_backend(&r.dir, &git)),
+            cache: PatchIdCache::new(git.clone()),
             pool: rayon::ThreadPoolBuilder::new()
                 .num_threads(2)
                 .build()

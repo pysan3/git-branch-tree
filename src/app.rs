@@ -18,7 +18,7 @@ use crate::github::detect_merged_prs;
 use crate::gitx::{Git, RepoView};
 use crate::input::resolve_branches;
 use crate::model::build_branches;
-use crate::patchid::{PatchId, PatchIdCache, patch_id_backend};
+use crate::patchid::{PatchId, PatchIdCache};
 use crate::plan::{PlanEntry, rebase_plan};
 use crate::render::{render_ascii, render_header, render_mermaid, render_rebase};
 use crate::testrun::run_tests;
@@ -48,7 +48,7 @@ pub fn run(cli: Cli) -> Result<()> {
         .num_threads(cli.job_count())
         .build()
         .context("cannot start the worker pool")?;
-    let cache = PatchIdCache::new(patch_id_backend(&workdir, &git));
+    let cache = PatchIdCache::new(git.clone());
     let base_sha = repo.rev_parse(&base)?;
 
     let mut merged = cli.merged_names();

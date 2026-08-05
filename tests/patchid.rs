@@ -1,15 +1,12 @@
-//! The two patch-id backends must agree, because the whole dependency engine keys
-//! commit identity on them: a disagreement would silently move dependency edges.
-//! The subprocess pipeline is the golden reference (it *is* git); git2 is the fast
-//! default that has to match it.
+//! Patch-ids are what the whole dependency engine keys commit identity on, so these
+//! pin the properties it relies on: the same change keeps its id across a rewrite, and
+//! commit metadata never affects it.
 
 mod common;
 
 use common::TestRepo;
 use git_branch_tree::gitx::{Git, RepoView, Sha};
-use git_branch_tree::patchid::{
-    Git2PatchIds, PatchIdCache, PatchIdSource, SubprocessPatchIds, patch_id_backend,
-};
+use git_branch_tree::patchid::{PatchIdCache, patch_ids};
 
 /// A repo exercising every shape that has (or lacks) a patch-id.
 fn mixed_repo() -> TestRepo {
@@ -34,39 +31,22 @@ fn all_commits(r: &TestRepo) -> Vec<Sha> {
 }
 
 #[test]
-fn git2_and_subprocess_backends_agree() {
+fn only_commits_with_a_diff_get_a_patch_id() {
+    // Empty, merge and root commits print no diff, so they have no identity to key on.
+    // The engine relies on that: such a commit must never be credited to a branch.
     let r = mixed_repo();
     let shas = all_commits(&r);
     assert!(shas.len() >= 5, "fixture should cover several shapes");
 
-    let subprocess = SubprocessPatchIds {
-        git: Git::new(&r.dir),
-    };
-    let git2 = Git2PatchIds {
-        repo_path: r.dir.clone(),
-    };
-
-    let want = subprocess.compute(&shas).unwrap();
-    let got = git2.compute(&shas).unwrap();
-
-    assert_eq!(want.len(), shas.len());
-    for sha in &shas {
-        assert_eq!(
-            got.get(sha),
-            want.get(sha),
-            "backends disagree on {sha}:\n  git2={:?}\n  git ={:?}",
-            got.get(sha),
-            want.get(sha),
-        );
-    }
-    // The fixture must genuinely exercise both outcomes, or this test proves nothing.
+    let ids = patch_ids(&Git::new(&r.dir), &shas).unwrap();
+    assert_eq!(ids.len(), shas.len(), "every commit accounted for");
     assert!(
-        want.values().any(|p| p.is_some()),
+        ids.values().any(|p| p.is_some()),
         "expected some commits to have a patch-id"
     );
     assert!(
-        want.values().any(|p| p.is_none()),
-        "expected empty/merge/root commits to have no patch-id"
+        ids.values().any(|p| p.is_none()),
+        "expected empty/merge/root commits to have none"
     );
 }
 
@@ -89,42 +69,29 @@ fn identical_content_shares_a_patch_id_across_rewrites() {
     let copied = r.sha("HEAD");
     assert_ne!(original, copied, "cherry-pick makes a new commit");
 
-    for source in [
-        Box::new(SubprocessPatchIds {
-            git: Git::new(&r.dir),
-        }) as Box<dyn PatchIdSource>,
-        Box::new(Git2PatchIds {
-            repo_path: r.dir.clone(),
-        }),
-    ] {
-        let shas = [
-            original.parse::<Sha>().unwrap(),
-            copied.parse::<Sha>().unwrap(),
-        ];
-        let ids = source.compute(&shas).unwrap();
-        assert_eq!(
-            ids[&shas[0]], ids[&shas[1]],
-            "cherry-pick must preserve the patch-id"
-        );
-        assert!(ids[&shas[0]].is_some());
-    }
+    let shas = [
+        original.parse::<Sha>().unwrap(),
+        copied.parse::<Sha>().unwrap(),
+    ];
+    let ids = patch_ids(&Git::new(&r.dir), &shas).unwrap();
+    assert_eq!(
+        ids[&shas[0]], ids[&shas[1]],
+        "cherry-pick must preserve the patch-id"
+    );
+    assert!(ids[&shas[0]].is_some());
 }
 
 #[test]
 fn cache_primes_once_and_serves_reads() {
     let r = mixed_repo();
     let shas = all_commits(&r);
-    let cache = PatchIdCache::new(patch_id_backend(&r.dir, &Git::new(&r.dir)));
+    let cache = PatchIdCache::new(Git::new(&r.dir));
 
     // Nothing is known before priming.
     assert!(cache.get(shas[0]).is_none());
     cache.prime(&shas).unwrap();
 
-    let direct = SubprocessPatchIds {
-        git: Git::new(&r.dir),
-    }
-    .compute(&shas)
-    .unwrap();
+    let direct = patch_ids(&Git::new(&r.dir), &shas).unwrap();
     for sha in &shas {
         assert_eq!(cache.get(*sha), direct[sha], "cached value for {sha}");
     }
@@ -161,11 +128,7 @@ fn patch_ids_ignore_commit_metadata() {
     let two = repo.rev_parse("feat/two").unwrap();
     assert_ne!(one, two, "different commits");
 
-    let ids = SubprocessPatchIds {
-        git: Git::new(&r.dir),
-    }
-    .compute(&[one, two])
-    .unwrap();
+    let ids = patch_ids(&Git::new(&r.dir), &[one, two]).unwrap();
     assert_eq!(
         ids[&one], ids[&two],
         "same diff must yield the same patch-id regardless of commit metadata"
