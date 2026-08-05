@@ -12,6 +12,12 @@ them by hand.
 
 ## [Unreleased]
 
+## [0.2.1](https://github.com/pysan3/git-branch-tree/compare/v0.2.0...v0.2.1) - 2026-08-05
+
+### Other
+
+- drop the library target so nothing is a published API ([#14](https://github.com/pysan3/git-branch-tree/pull/14))
+
 ## [0.2.0](https://github.com/pysan3/git-branch-tree/compare/v0.1.2...v0.2.0) - 2026-08-05
 
 ### Other
