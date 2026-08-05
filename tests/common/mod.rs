@@ -190,7 +190,7 @@ pub const DIAMOND: &[&str] = &["feat/root", "feat/left", "feat/right", "feat/top
 use std::collections::BTreeMap;
 
 use git_branch_tree::blame::SubprocessBlamer;
-use git_branch_tree::deps::{compute_ancestry_dependencies, compute_dependencies};
+use git_branch_tree::deps::{Engine, compute_ancestry_dependencies};
 use git_branch_tree::exclude::ExcludeSet;
 use git_branch_tree::gitx::{Git, RepoView};
 use git_branch_tree::model::{BranchSet, build_branches};
@@ -236,17 +236,15 @@ pub fn analyse(r: &TestRepo, branches: &[&str]) -> BranchSet {
     let mut set = h.build(branches);
     let blamer = SubprocessBlamer { git: h.git.clone() };
     let exclude = ExcludeSet::new(&[], true).expect("default excludes");
-    compute_dependencies(
-        &mut set,
-        "main",
-        h.base(),
-        &h.repo,
-        &h.git,
-        &blamer,
-        &h.cache,
-        &exclude,
-        &h.pool,
-    )
+    Engine {
+        repo: &h.repo,
+        git: &h.git,
+        blamer: &blamer,
+        cache: &h.cache,
+        exclude: &exclude,
+        pool: &h.pool,
+    }
+    .compute_dependencies(&mut set, "main", h.base())
     .expect("compute dependencies");
     set
 }

@@ -12,7 +12,7 @@ use anyhow::{Context, Result, bail};
 use crate::base::{detect_base, update_base};
 use crate::blame::SubprocessBlamer;
 use crate::cli::Cli;
-use crate::deps::{compute_ancestry_dependencies, compute_dependencies};
+use crate::deps::{Engine, compute_ancestry_dependencies};
 use crate::exclude::ExcludeSet;
 use crate::github::detect_merged_prs;
 use crate::gitx::{Git, RepoView};
@@ -74,9 +74,15 @@ pub fn run(cli: Cli) -> Result<()> {
     } else {
         let blamer = SubprocessBlamer { git: git.clone() };
         let exclude = ExcludeSet::new(&cli.exclude, !cli.no_default_exclude)?;
-        compute_dependencies(
-            &mut set, &base, base_sha, &repo, &git, &blamer, &cache, &exclude, &pool,
-        )?;
+        let engine = Engine {
+            repo: &repo,
+            git: &git,
+            blamer: &blamer,
+            cache: &cache,
+            exclude: &exclude,
+            pool: &pool,
+        };
+        engine.compute_dependencies(&mut set, &base, base_sha)?;
     }
 
     // Only branches actually under analysis can be resolved to patch-ids, so a

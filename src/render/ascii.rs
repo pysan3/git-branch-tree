@@ -55,70 +55,75 @@ pub fn render_ascii(set: &BranchSet, base: &str, merged: &HashSet<String>) -> St
         }
     }
 
-    let mut lines = vec![base.to_string()];
-    let mut printed = vec![false; set.branches.len()];
+    let tree = Tree {
+        set,
+        children: &children,
+        merged,
+    };
+    tree.render(&entries, base)
+}
 
-    #[allow(clippy::too_many_arguments)]
+/// The read-only inputs every step of the walk consults. Grouped because they are
+/// fixed for the whole traversal; the parts that change per step - which node, how
+/// deep, and the output being built - stay explicit arguments.
+struct Tree<'a> {
+    set: &'a BranchSet,
+    children: &'a [Vec<BranchId>],
+    merged: &'a HashSet<String>,
+}
+
+impl Tree<'_> {
+    fn render(&self, roots: &[BranchId], base: &str) -> String {
+        let mut printed = vec![false; self.set.branches.len()];
+        let mut lines = vec![base.to_string()];
+        for (i, &r) in roots.iter().enumerate() {
+            self.walk(r, "", i == roots.len() - 1, &mut printed, &mut lines);
+        }
+        lines.join("\n")
+    }
+
     fn walk(
-        set: &BranchSet,
-        children: &[Vec<BranchId>],
-        merged: &HashSet<String>,
-        printed: &mut [bool],
-        lines: &mut Vec<String>,
+        &self,
         node: BranchId,
         prefix: &str,
         is_last: bool,
+        printed: &mut [bool],
+        lines: &mut Vec<String>,
     ) {
         let connector = if is_last { "└─ " } else { "├─ " };
-        let name = &set.get(node).name;
+        let name = &self.set.get(node).name;
         if printed[node.0] {
             // DAG cross-link / cycle: show once, reference otherwise.
             lines.push(format!("{prefix}{connector}{name}  ↩ (shown above)"));
             return;
         }
         printed[node.0] = true;
-        let dp = set.open_parents(node, merged);
-        let extra = if dp.len() > 1 {
-            let primary = set.primary_open_parent(node, merged);
-            let mut others: Vec<&str> = dp
-                .iter()
-                .filter(|&&p| Some(p) != primary)
-                .map(|&p| set.get(p).name.as_str())
-                .collect();
-            others.sort();
-            format!("   (also depends on: {})", others.join(", "))
-        } else {
-            String::new()
-        };
-        lines.push(format!("{prefix}{connector}{name}{extra}"));
+        lines.push(format!(
+            "{prefix}{connector}{name}{}",
+            self.annotation(node)
+        ));
+
         let child_prefix = format!("{prefix}{}", if is_last { "   " } else { "│  " });
-        let kids = &children[node.0];
+        let kids = &self.children[node.0];
         for (i, &c) in kids.iter().enumerate() {
-            walk(
-                set,
-                children,
-                merged,
-                printed,
-                lines,
-                c,
-                &child_prefix,
-                i == kids.len() - 1,
-            );
+            self.walk(c, &child_prefix, i == kids.len() - 1, printed, lines);
         }
     }
 
-    let n = entries.len();
-    for (i, &r) in entries.iter().enumerate() {
-        walk(
-            set,
-            &children,
-            merged,
-            &mut printed,
-            &mut lines,
-            r,
-            "",
-            i == n - 1,
-        );
+    /// Names the dependencies a node has beyond the parent it is drawn under, since the
+    /// tree can only nest it below one of them.
+    fn annotation(&self, node: BranchId) -> String {
+        let open = self.set.open_parents(node, self.merged);
+        if open.len() <= 1 {
+            return String::new();
+        }
+        let primary = self.set.primary_open_parent(node, self.merged);
+        let mut others: Vec<&str> = open
+            .iter()
+            .filter(|&&p| Some(p) != primary)
+            .map(|&p| self.set.get(p).name.as_str())
+            .collect();
+        others.sort();
+        format!("   (also depends on: {})", others.join(", "))
     }
-    lines.join("\n")
 }
