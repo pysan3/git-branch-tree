@@ -2,12 +2,17 @@
 
 Thanks for taking a look.
 
-## Conventional commits are required
+## The PR title must be a conventional commit
 
-Releases are automated by [release-plz](https://release-plz.dev), which derives the next
-version and the changelog from commit messages. A commit that does not follow
-[Conventional Commits](https://www.conventionalcommits.org) will land in neither, so the
-format is load-bearing rather than a style preference.
+`main` accepts squash merges only, and the squash commit takes its subject from the
+**pull request title** — so the PR title is the one message that lands on `main`. Your
+individual commits are collapsed and their messages do not survive the merge; write them
+for reviewers, not for the changelog.
+
+That title is what [release-plz](https://release-plz.dev) reads to work out the next
+version and the changelog entry, so
+[Conventional Commits](https://www.conventionalcommits.org) format is load-bearing here
+rather than a style preference:
 
 ```
 feat: add --on-parent for stacked PR retargeting
@@ -18,9 +23,14 @@ ci: pin the MSRV job to rust-version
 chore: bump gix
 ```
 
-Use `feat!:` (or a `BREAKING CHANGE:` trailer) for anything that changes the emitted
-commands or the CLI surface — the rebase block gets pasted into a shell, so a change there
-is a change to what people run.
+Which prefix you choose decides whether a release happens at all: `feat:` bumps the
+minor version and `fix:` the patch, while `docs:`, `test:`, `ci:` and `chore:` change
+nothing that gets published. Use `feat!:`, or a `BREAKING CHANGE:` trailer in the PR
+body, for anything that alters the emitted commands or the CLI surface — the rebase
+block gets pasted into a shell, so a change there is a change to what people run.
+
+The PR body becomes the commit body, which is where a `BREAKING CHANGE:` trailer needs
+to go to be picked up.
 
 ## Before opening a PR
 
@@ -30,7 +40,9 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 ```
 
-CI runs exactly these, plus an MSRV build, `cargo-deny` and a spellcheck.
+CI runs exactly these, plus an MSRV build, `cargo-deny` and a spellcheck. `main` is
+protected: a pull request is required, and the single `ci` check has to pass before it
+can be merged.
 
 ## Tests
 
