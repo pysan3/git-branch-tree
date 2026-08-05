@@ -61,7 +61,7 @@ pub fn run(cli: Cli) -> Result<()> {
     // Ask GitHub before building the graph, so a network failure costs nothing.
     let mut auto: Vec<String> = Vec::new();
     if cli.auto_merged {
-        auto = detect_merged_prs(&git, &names)?
+        auto = detect_merged_prs(&git, &names, &pool)?
             .into_iter()
             .filter(|n| !merged.contains(n))
             .collect();

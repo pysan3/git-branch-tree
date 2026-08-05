@@ -15,6 +15,24 @@ use std::path::{Path, PathBuf};
 use assert_cmd::Command;
 use common::TestRepo;
 
+/// Answers the per-branch `--head` query: a merged PR for feat/a, none for anything
+/// else. Echoing the count is exactly what `--json number --jq length` produces.
+const MERGED_A: &str = r#"case "$*" in
+  *"--head feat/a "*) echo 1 ;;
+  *) echo 0 ;;
+esac"#;
+
+/// Nothing is merged.
+const MERGED_NONE: &str = "echo 0";
+
+/// Records every branch it was asked about, so a test can assert the tool asks about
+/// the branches it is analysing rather than pulling a bulk list.
+const RECORD_QUERIES: &str = r#"for a in "$@"; do
+  case "$prev" in --head) echo "$a" >> "$GBT_QUERY_LOG" ;; esac
+  prev="$a"
+done
+echo 0"#;
+
 /// Install a fake `gh` running `body`, and return the directory holding it.
 fn stub_gh(r: &TestRepo, body: &str) -> PathBuf {
     let bin = r.dir.join("stubbin");
@@ -62,8 +80,7 @@ fn gbt(r: &TestRepo, path: &str, args: &[&str]) -> Command {
 #[test]
 fn auto_merged_collapses_the_branch_and_notes_it() {
     let r = stack();
-    // gh also reports a merged branch we did not ask about; it must be ignored.
-    let bin = stub_gh(&r, "printf 'feat/a\\nsomeone-elses-branch\\n'");
+    let bin = stub_gh(&r, MERGED_A);
 
     let out = gbt(
         &r,
@@ -78,10 +95,6 @@ fn auto_merged_collapses_the_branch_and_notes_it() {
         stdout.contains("# auto-detected as merged on GitHub: feat/a\n"),
         "{stdout}"
     );
-    assert!(
-        !stdout.contains("someone-elses-branch"),
-        "only analysed branches are reported:\n{stdout}"
-    );
     // feat/a has landed, so it is gone from the tree and skipped in the rebase block.
     assert!(!stdout.contains("├─ feat/a"), "{stdout}");
     assert!(
@@ -92,23 +105,66 @@ fn auto_merged_collapses_the_branch_and_notes_it() {
 }
 
 #[test]
-fn an_empty_pr_list_merges_nothing() {
+fn finding_nothing_is_reported_rather_than_silent() {
     let r = stack();
-    let bin = stub_gh(&r, "true");
+    let bin = stub_gh(&r, MERGED_NONE);
 
-    let out = gbt(
+    let assert = gbt(
         &r,
         &path_with(&bin),
         &["--format", "ascii", "--auto-merged", "feat/a", "feat/b"],
     )
     .assert()
     .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
 
     assert!(!stdout.contains("auto-detected as merged"), "{stdout}");
     assert!(
         !stdout.contains("squash-merged branches skipped"),
         "{stdout}"
+    );
+    // Silence here is indistinguishable from the flag never running - which is exactly
+    // how a real bug in this code went unnoticed.
+    assert!(
+        stderr.contains("asking GitHub whether 2 branch(es) have merged pull requests"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("no merged pull requests found for the analysed branches"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn each_analysed_branch_is_queried_directly() {
+    // Regression test. This used to pull the last 1000 merged PRs and intersect, which
+    // made the cost scale with the repository's activity instead of the branch count:
+    // on a busy monorepo the window covered days, so every branch merged before it was
+    // silently missed. Each branch must be asked about by name.
+    let r = stack();
+    let log = r.dir.join("queries.txt");
+    let bin = stub_gh(&r, RECORD_QUERIES);
+
+    gbt(
+        &r,
+        &path_with(&bin),
+        &["--format", "ascii", "--auto-merged", "feat/a", "feat/b"],
+    )
+    .env("GBT_QUERY_LOG", &log)
+    .assert()
+    .success();
+
+    let mut asked: Vec<String> = std::fs::read_to_string(&log)
+        .expect("the stub recorded its queries")
+        .lines()
+        .map(str::to_string)
+        .collect();
+    asked.sort();
+    assert_eq!(
+        asked,
+        vec!["feat/a".to_string(), "feat/b".to_string()],
+        "every analysed branch should be queried by name"
     );
 }
 
@@ -137,7 +193,7 @@ fn a_failing_gh_is_reported_not_swallowed() {
         .failure()
         .code(1);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    assert!(stderr.starts_with("error: gh pr list"), "{stderr}");
+    assert!(stderr.contains("error: gh pr list"), "{stderr}");
     assert!(stderr.contains("not logged in"), "{stderr}");
 }
 
@@ -162,9 +218,9 @@ fn a_missing_gh_explains_the_flag() {
     .failure()
     .code(1);
     let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    assert_eq!(
-        stderr,
-        "error: gh (GitHub CLI) not found; install it or omit --auto-merged\n"
+    assert!(
+        stderr.ends_with("error: gh (GitHub CLI) not found; install it or omit --auto-merged\n"),
+        "{stderr}"
     );
 }
 
