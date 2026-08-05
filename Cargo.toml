@@ -10,6 +10,19 @@ license = "MIT"
 keywords = ["git", "stacked-prs", "rebase", "branch", "cli"]
 categories = ["command-line-utilities", "development-tools"]
 readme = "README.md"
+# Repo infrastructure is not part of what people install. Keeping it out also stops a
+# workflow tweak or a CONTRIBUTING edit from changing the published artifact, which is
+# what makes release-plz treat it as a releasable change and cut a new patch version.
+# src/ and tests/ stay in, so a published version can be verified by building and
+# testing exactly what was shipped.
+exclude = [
+  ".github/",
+  ".gitignore",
+  ".typos.toml",
+  "CONTRIBUTING.md",
+  "deny.toml",
+  "release-plz.toml",
+]
 
 [dependencies]
 anyhow = "1"

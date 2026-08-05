@@ -1,11 +1,18 @@
 name: release
 
-# Fires on the tag release-plz pushes (hence the PAT there: a GITHUB_TOKEN-pushed tag
-# would not trigger this workflow). Attaches prebuilt archives to the GitHub Release that
-# release-plz created, using the `$bin-$target.$ext` naming cargo-binstall expects.
+# Attaches prebuilt archives to a GitHub Release, named `$bin-$target.$ext` as
+# cargo-binstall expects.
+#
+# Triggered by the release being published, not by the tag push. The upload action only
+# adds assets to a release that already exists - it never creates one - and release-plz
+# pushes the tag before creating the release, so a tag trigger races it and fails with
+# "release not found". Waiting for the release itself removes the race.
+#
+# This still needs release-plz to hold a PAT: events caused by GITHUB_TOKEN do not start
+# workflows, so a release it created would never reach this file.
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
 
 permissions:
   contents: read
