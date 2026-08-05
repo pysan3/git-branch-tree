@@ -12,6 +12,12 @@ them by hand.
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/pysan3/git-branch-tree/compare/v0.1.2...v0.2.0) - 2026-08-05
+
+### Other
+
+- [**breaking**] drop git2 and compute patch-ids with git itself ([#10](https://github.com/pysan3/git-branch-tree/pull/10))
+
 ## [0.1.2](https://github.com/pysan3/git-branch-tree/compare/v0.1.1...v0.1.2) - 2026-08-05
 
 ### Fixed
