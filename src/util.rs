@@ -44,6 +44,9 @@ mod tests {
     }
 
     /// Feed one quoted word through a real shell and return the argument it produced.
+    /// Unix only - `shlex` quotes for POSIX shells, which is what the emitted block
+    /// targets, so a round trip has to be checked against one.
+    #[cfg(unix)]
     fn through_shell(quoted: &str) -> String {
         let out = std::process::Command::new("sh")
             .arg("-c")
@@ -63,6 +66,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn dangerous_refs_survive_a_shell_round_trip_without_executing() {
         // The real property: whatever git allows in a ref name must reach the command as
         // one literal argument, never as shell syntax. Verified against a real shell so
@@ -91,6 +95,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn a_command_substitution_does_not_run() {
         // If quoting failed, the shell would run `id` and print something else entirely.
         let quoted = shell_quote("feat/$(id)");

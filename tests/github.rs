@@ -2,6 +2,11 @@
 //!
 //! PATH is set per child process rather than with `set_var`, which would race across
 //! the parallel test threads sharing one process environment.
+//!
+//! Unix only: the stub is a `#!/bin/sh` script, which Windows will not execute. The
+//! feature itself is portable - it just shells out to `gh` - so only the stubbing
+//! technique is platform-bound.
+#![cfg(unix)]
 
 mod common;
 

@@ -4,6 +4,11 @@
 //! chain-upstream appear in the plan at all - so the fixtures here are stacks whose
 //! members turn out to be content-independent, which is exactly the case the tool
 //! flattens.
+//!
+//! Unix only: the test commands here are POSIX (`true`, `test ! -f`). The runner itself
+//! is portable and dispatches through `cmd /C` on Windows; it is these fixtures that
+//! would need a second dialect.
+#![cfg(unix)]
 
 mod common;
 
