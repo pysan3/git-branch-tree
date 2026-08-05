@@ -215,4 +215,10 @@ recording it.
 
 ## License
 
-MIT © 2026- pysan3
+Mozilla Public License 2.0 © 2026- pysan3
+
+MPL-2.0 is file-scoped: you can combine this with code under other licences, including
+proprietary code, and only changes to *these* files have to be shared back.
+
+Versions up to and including 0.2.x were published under MIT and stay that way — crates.io
+releases are immutable.
