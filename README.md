@@ -212,6 +212,10 @@ recording it.
   `$(...)` in branch names.
 - stdout carries the report only; operational notes go to stderr prefixed with `# `. So
   `git-branch-tree ... > plan.sh` captures just the report.
+- The crate also builds a library, but **it is not a public API** — it exists so the binary
+  and the integration tests can share code, and it is exempt from semantic versioning. The
+  supported interface is the command line: its flags, its output, and the rebase block it
+  emits. If you want to drive this from Rust, open an issue and say what for.
 
 ## License
 
