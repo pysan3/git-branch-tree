@@ -451,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "git-branch-tree"
-version = "0.2.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "assert_cmd",
