@@ -27,3 +27,12 @@ tempfile = "3"
 
 [profile.release]
 lto = "thin"
+
+# Stated explicitly rather than relying on cargo-binstall's inference, so the archive
+# names release.yml uploads and the ones binstall fetches cannot drift apart.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-suffix }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"

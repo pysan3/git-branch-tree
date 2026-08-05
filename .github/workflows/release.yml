@@ -1,0 +1,49 @@
+name: release
+
+# Fires on the tag release-plz pushes (hence the PAT there: a GITHUB_TOKEN-pushed tag
+# would not trigger this workflow). Attaches prebuilt archives to the GitHub Release that
+# release-plz created, using the `$bin-$target.$ext` naming cargo-binstall expects.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-15
+          - target: x86_64-apple-darwin
+            os: macos-15
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+          # Native arm runner, so no cross toolchain is needed.
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          - target: x86_64-pc-windows-msvc
+            os: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: ${{ matrix.target }}
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: git-branch-tree
+          target: ${{ matrix.target }}
+          archive: $bin-$target
+          # .tar.gz everywhere except Windows, matching the binstall metadata in
+          # Cargo.toml.
+          tar: unix
+          zip: windows
+          include: README.md,LICENSE,CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}

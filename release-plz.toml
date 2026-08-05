@@ -1,0 +1,9 @@
+[workspace]
+# release-plz owns the GitHub Release; release.yml then attaches binaries to the tag it
+# pushes. (There is no cargo-dist here: the install story is crates.io + cargo-binstall.)
+git_release_enable = true
+git_tag_enable = true
+# A single binary crate has no downstream API consumers, so a semver check would only
+# ever block on internal refactors.
+semver_check = false
+changelog_update = true
