@@ -1,8 +1,6 @@
-mod common;
-
-use common::TestRepo;
-use git_branch_tree::base::{detect_base, update_base, worktree_for_branch};
-use git_branch_tree::gitx::{Git, RepoView};
+use crate::base::{detect_base, update_base, worktree_for_branch};
+use crate::gitx::{Git, RepoView};
+use crate::testfix::TestRepo;
 
 fn views(r: &TestRepo) -> (RepoView, Git) {
     (RepoView::discover(&r.dir).unwrap(), Git::new(&r.dir))

@@ -2,11 +2,9 @@
 //! pin the properties it relies on: the same change keeps its id across a rewrite, and
 //! commit metadata never affects it.
 
-mod common;
-
-use common::TestRepo;
-use git_branch_tree::gitx::{Git, RepoView, Sha};
-use git_branch_tree::patchid::{PatchIdCache, patch_ids};
+use crate::gitx::{Git, RepoView, Sha};
+use crate::patchid::{PatchIdCache, patch_ids};
+use crate::testfix::TestRepo;
 
 /// A repo exercising every shape that has (or lacks) a patch-id.
 fn mixed_repo() -> TestRepo {

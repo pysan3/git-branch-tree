@@ -1,7 +1,5 @@
-mod common;
-
-use common::TestRepo;
-use git_branch_tree::gitx::{Git, RepoView};
+use crate::gitx::{Git, RepoView};
+use crate::testfix::TestRepo;
 
 fn stacked_repo() -> TestRepo {
     let r = TestRepo::new();

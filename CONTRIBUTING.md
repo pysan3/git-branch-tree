@@ -46,10 +46,25 @@ can be merged.
 
 ## Tests
 
-Integration tests drive **real git** in temporary directories — there are no mocks, and
-the fixtures are milliseconds each. If you touch the dependency engine or a renderer, add
-a fixture that shows the shape you fixed; several of the trickier cases (the diamond, the
+Every test drives **real git** in a temporary directory — there are no mocks, and the
+fixtures are milliseconds each. If you touch the dependency engine or a renderer, add a
+fixture that shows the shape you fixed; several of the trickier cases (the diamond, the
 squash-merge skip point) exist because an invented expectation turned out to be wrong.
+
+Where a test goes depends on what it needs:
+
+- **`src/tests/`** — anything that calls into the code directly. These are `#[cfg(test)]`
+  modules of the binary crate, which is what lets them reach internals. Fixtures and
+  pipeline helpers come from `src/testfix/`.
+- **`tests/`** — anything that runs the built binary and asserts on its output. These are
+  separate crates and cannot see inside, which is the point: they exercise the interface
+  users actually have.
+
+That split is deliberate. This crate publishes **no library target**, so nothing has to be
+made `pub` for a test to reach it, and no signature becomes a semver promise — which
+matters because `gix` types are everywhere and `gix` is pre-1.0. The fixture builder in
+`src/testfix/repo.rs` deliberately references nothing from the crate, so `tests/common`
+includes that one file by path instead of keeping a second copy.
 
 Output is pinned byte for byte on purpose — the rebase block gets pasted into a shell, so
 a change to it is a change to what people run. If a change alters the report, that is a
