@@ -4,56 +4,11 @@ mod common;
 
 use std::collections::HashSet;
 
-use common::TestRepo;
-use git_branch_tree::blame::SubprocessBlamer;
-use git_branch_tree::deps::compute_dependencies;
-use git_branch_tree::exclude::ExcludeSet;
-use git_branch_tree::gitx::{Git, RepoView};
-use git_branch_tree::model::{BranchSet, build_branches};
-use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
+use common::{
+    DIAMOND, TestRepo, analyse as analysed, diamond_under_root as diamond_repo, names as merged,
+};
 use git_branch_tree::plan::rebase_plan;
 use git_branch_tree::render::{render_ascii, render_header, render_mermaid};
-
-/// Run the full analysis so the renderers are exercised on real graphs.
-fn analysed(r: &TestRepo, branches: &[&str]) -> BranchSet {
-    let git = Git::new(&r.dir);
-    let repo = RepoView::discover(&r.dir).unwrap();
-    let cache = PatchIdCache::new(patch_id_backend(&r.dir, &git));
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-    let base = repo.rev_parse("main").unwrap();
-    let names: Vec<String> = branches.iter().map(|s| s.to_string()).collect();
-    let mut set = build_branches(&names, base, &repo, &cache, &pool).unwrap();
-    let blamer = SubprocessBlamer { git: git.clone() };
-    let exclude = ExcludeSet::new(&[], true).unwrap();
-    compute_dependencies(
-        &mut set, "main", base, &repo, &git, &blamer, &cache, &exclude, &pool,
-    )
-    .unwrap();
-    set
-}
-
-fn merged(names: &[&str]) -> HashSet<String> {
-    names.iter().map(|s| s.to_string()).collect()
-}
-
-/// root owns line 2, left owns line 1, right owns line 3, top edits 1 and 3 - so top
-/// depends on both left and right.
-fn diamond_repo() -> TestRepo {
-    let r = TestRepo::new();
-    r.branch_from("feat/root", "main");
-    r.commit_file("f.txt", "r1\nr2\nr3\n", "feat: root adds the file");
-    r.branch_from("feat/left", "feat/root");
-    r.commit_file("f.txt", "L1\nr2\nr3\n", "feat: left rewrites line 1");
-    r.branch_from("feat/right", "feat/left");
-    r.commit_file("f.txt", "L1\nr2\nR3\n", "feat: right rewrites line 3");
-    r.branch_from("feat/top", "feat/right");
-    r.commit_file("f.txt", "T1\nr2\nT3\n", "feat: top rewrites lines 1 and 3");
-    r.checkout("main");
-    r
-}
 
 #[test]
 fn ascii_renders_a_chain_as_nested_branches() {
@@ -92,7 +47,7 @@ fn ascii_renders_independent_branches_side_by_side() {
 #[test]
 fn ascii_annotates_a_second_parent_instead_of_duplicating_the_subtree() {
     let r = diamond_repo();
-    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+    let set = analysed(&r, DIAMOND);
     assert_eq!(
         render_ascii(&set, "main", &HashSet::new()),
         "\
@@ -107,7 +62,7 @@ main
 #[test]
 fn mermaid_expresses_multiple_parents_natively() {
     let r = diamond_repo();
-    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+    let set = analysed(&r, DIAMOND);
     assert_eq!(
         render_mermaid(&set, "main", &HashSet::new()),
         "\
@@ -130,7 +85,7 @@ graph TD
 #[test]
 fn a_merged_branch_collapses_into_the_base() {
     let r = diamond_repo();
-    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+    let set = analysed(&r, DIAMOND);
 
     // root has landed: it *is* the base now, so it is omitted and the branches that
     // depended only on it hang directly off the base.
@@ -156,7 +111,7 @@ main
 #[test]
 fn merging_an_inner_branch_repoints_its_dependants() {
     let r = diamond_repo();
-    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+    let set = analysed(&r, DIAMOND);
 
     // With left merged, top keeps only its right-hand dependency, so the annotation
     // disappears rather than naming a landed branch.
@@ -190,7 +145,7 @@ fn the_tree_and_the_plan_agree_on_where_each_branch_hangs() {
     // under one parent while rebasing it onto a different one. They now share a
     // definition; this pins that they cannot disagree, under every merge state.
     let r = diamond_repo();
-    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+    let set = analysed(&r, DIAMOND);
 
     for landed in [
         merged(&[]),

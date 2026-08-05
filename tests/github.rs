@@ -12,8 +12,7 @@ mod common;
 
 use std::path::{Path, PathBuf};
 
-use assert_cmd::Command;
-use common::TestRepo;
+use common::{Gbt, TestRepo, line_edit_chain};
 
 /// Answers the per-branch `--head` query: a merged PR for feat/a, none for anything
 /// else. Echoing the count is exactly what `--json number --jq length` produces.
@@ -59,22 +58,13 @@ fn path_with(bin: &Path) -> String {
     )
 }
 
+/// feat/a and feat/b of the shared chain; feat/c is unused here.
 fn stack() -> TestRepo {
-    let r = TestRepo::new();
-    r.commit_file("f.txt", "l1\nl2\nl3\n", "chore: seed");
-    r.branch_from("feat/a", "main");
-    r.commit_file("f.txt", "A1\nl2\nl3\n", "feat: a");
-    r.branch_from("feat/b", "feat/a");
-    r.commit_file("f.txt", "B1\nl2\nl3\n", "feat: b");
-    r.checkout("main");
-    r
+    line_edit_chain()
 }
 
-fn gbt(r: &TestRepo, path: &str, args: &[&str]) -> Command {
-    let mut cmd = Command::cargo_bin("git-branch-tree").unwrap();
-    cmd.current_dir(&r.dir).env("PATH", path).arg("--no-fetch");
-    cmd.args(args);
-    cmd
+fn gbt(r: &TestRepo, path: &str, args: &[&str]) -> Gbt {
+    Gbt::new(r).env("PATH", path).args(args)
 }
 
 #[test]
@@ -82,14 +72,12 @@ fn auto_merged_collapses_the_branch_and_notes_it() {
     let r = stack();
     let bin = stub_gh(&r, MERGED_A);
 
-    let out = gbt(
+    let stdout = gbt(
         &r,
         &path_with(&bin),
         &["--format", "ascii", "--auto-merged", "feat/a", "feat/b"],
     )
-    .assert()
-    .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    .stdout();
 
     assert!(
         stdout.contains("# auto-detected as merged on GitHub: feat/a\n"),
@@ -109,15 +97,12 @@ fn finding_nothing_is_reported_rather_than_silent() {
     let r = stack();
     let bin = stub_gh(&r, MERGED_NONE);
 
-    let assert = gbt(
+    let (stdout, stderr) = gbt(
         &r,
         &path_with(&bin),
         &["--format", "ascii", "--auto-merged", "feat/a", "feat/b"],
     )
-    .assert()
-    .success();
-    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    .output();
 
     assert!(!stdout.contains("auto-detected as merged"), "{stdout}");
     assert!(
@@ -151,9 +136,8 @@ fn each_analysed_branch_is_queried_directly() {
         &path_with(&bin),
         &["--format", "ascii", "--auto-merged", "feat/a", "feat/b"],
     )
-    .env("GBT_QUERY_LOG", &log)
-    .assert()
-    .success();
+    .env("GBT_QUERY_LOG", log.to_str().unwrap())
+    .stdout();
 
     let mut asked: Vec<String> = std::fs::read_to_string(&log)
         .expect("the stub recorded its queries")
@@ -179,8 +163,7 @@ fn without_the_flag_gh_is_never_consulted() {
         &path_with(&bin),
         &["--format", "ascii", "feat/a", "feat/b"],
     )
-    .assert()
-    .success();
+    .stdout();
 }
 
 #[test]
@@ -188,11 +171,7 @@ fn a_failing_gh_is_reported_not_swallowed() {
     let r = stack();
     let bin = stub_gh(&r, "echo 'gh: not logged in' >&2; exit 1");
 
-    let assert = gbt(&r, &path_with(&bin), &["--auto-merged", "feat/a", "feat/b"])
-        .assert()
-        .failure()
-        .code(1);
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let stderr = gbt(&r, &path_with(&bin), &["--auto-merged", "feat/a", "feat/b"]).failure();
     assert!(stderr.contains("error: gh pr list"), "{stderr}");
     assert!(stderr.contains("not logged in"), "{stderr}");
 }
@@ -209,15 +188,12 @@ fn a_missing_gh_explains_the_flag() {
         &format!("#!/bin/sh\nexec {real_git} \"$@\"\n"),
     );
 
-    let assert = gbt(
+    let stderr = gbt(
         &r,
         &bin.display().to_string(),
         &["--auto-merged", "feat/a", "feat/b"],
     )
-    .assert()
-    .failure()
-    .code(1);
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    .failure();
     assert!(
         stderr.ends_with("error: gh (GitHub CLI) not found; install it or omit --auto-merged\n"),
         "{stderr}"

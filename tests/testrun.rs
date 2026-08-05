@@ -12,58 +12,13 @@
 
 mod common;
 
-use assert_cmd::Command;
-use common::TestRepo;
+use common::{Gbt, TestRepo, disjoint_stack as chain};
 
-fn gbt(r: &TestRepo, args: &[&str]) -> Command {
-    // Redirect the worktree root into this fixture's tempdir. The runner deliberately
-    // leaves worktrees behind for reuse, which would otherwise litter the real /tmp and
-    // outlive the test. Set per child process, never with `set_var`, which would race
-    // across the parallel test threads.
-    let tmp = r.dir.join("tmp");
-    std::fs::create_dir_all(&tmp).unwrap();
-    let mut cmd = Command::cargo_bin("git-branch-tree").unwrap();
-    cmd.current_dir(&r.dir)
-        .env("TMPDIR", &tmp)
-        .arg("--no-fetch");
-    cmd.args(args);
-    cmd
-}
-
-fn stdout_of(assert: assert_cmd::assert::Assert) -> String {
-    String::from_utf8(assert.get_output().stdout.clone()).unwrap()
-}
-
-/// A git stack of three branches that each add a different file, so all three are
-/// content-independent. feat/b and feat/c therefore land on the base and get tested;
-/// feat/a has no chain-upstream, so it is not part of the plan.
-fn chain() -> TestRepo {
-    let r = TestRepo::new();
-    r.branch_from("feat/a", "main");
-    r.commit_file("a.txt", "a\n", "feat: a");
-    r.branch_from("feat/b", "feat/a");
-    r.commit_file("b.txt", "b\n", "feat: b");
-    r.branch_from("feat/c", "feat/b");
-    r.commit_file("c.txt", "c\n", "feat: c");
-    r.checkout("main");
-    r
+fn run(r: &TestRepo, fixed: &[&str], branches: &[&str]) -> String {
+    Gbt::new(r).args(fixed).args(branches).stdout()
 }
 
 const CHAIN: &[&str] = &["feat/a", "feat/b", "feat/c"];
-
-fn args(fixed: &[&str], branches: &[&str]) -> Vec<String> {
-    fixed
-        .iter()
-        .chain(branches.iter())
-        .map(|s| s.to_string())
-        .collect()
-}
-
-fn run(r: &TestRepo, fixed: &[&str], branches: &[&str]) -> String {
-    let owned = args(fixed, branches);
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    stdout_of(gbt(r, &refs).assert().success())
-}
 
 #[test]
 fn a_passing_command_leaves_every_tested_branch_in_the_chain() {
@@ -148,10 +103,10 @@ fn worktrees_live_at_a_predictable_path_reused_across_runs() {
     let r = chain();
     let mut seen = Vec::new();
     for _ in 0..2 {
-        let owned = args(&["--format", "ascii", "--test", "true"], CHAIN);
-        let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-        let assert = gbt(&r, &refs).assert().success();
-        let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+        let (_, stderr) = Gbt::new(&r)
+            .args(&["--format", "ascii", "--test", "true"])
+            .args(CHAIN)
+            .output();
         seen.push(
             stderr
                 .lines()
@@ -225,23 +180,17 @@ fn a_test_patch_is_applied_before_the_command() {
 #[test]
 fn a_missing_test_patch_is_rejected_up_front() {
     let r = chain();
-    let assert = gbt(
-        &r,
-        &[
-            "--test",
-            "true",
-            "--test-patch",
-            "/nonexistent/fix.patch",
-            "feat/a",
-            "feat/b",
-        ],
-    )
-    .assert()
-    .failure()
-    .code(1);
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert_eq!(
-        stderr,
+        Gbt::new(&r)
+            .args(&[
+                "--test",
+                "true",
+                "--test-patch",
+                "/nonexistent/fix.patch",
+                "feat/a",
+                "feat/b",
+            ])
+            .failure(),
         "error: --test-patch file not found: /nonexistent/fix.patch\n"
     );
 }
@@ -275,9 +224,9 @@ fn a_branch_that_cannot_rebase_cleanly_is_reported_as_such() {
 #[test]
 fn without_the_flag_no_worktrees_are_made() {
     let r = chain();
-    let owned = args(&["--format", "ascii"], CHAIN);
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    let assert = gbt(&r, &refs).assert().success();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let (_, stderr) = Gbt::new(&r)
+        .args(&["--format", "ascii"])
+        .args(CHAIN)
+        .output();
     assert!(!stderr.contains("test worktrees under"), "{stderr}");
 }

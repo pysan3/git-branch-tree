@@ -2,45 +2,16 @@
 
 mod common;
 
-use common::TestRepo;
-use git_branch_tree::gitx::{Git, RepoView};
+use common::{Harness as Ctx, TestRepo, disjoint_stack as linear_stack};
 use git_branch_tree::input::resolve_branches;
 use git_branch_tree::model::{BranchSet, build_branches};
-use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
-
-struct Ctx {
-    repo: RepoView,
-    cache: PatchIdCache,
-    pool: rayon::ThreadPool,
-}
 
 fn ctx(r: &TestRepo) -> Ctx {
-    let git = Git::new(&r.dir);
-    Ctx {
-        repo: RepoView::discover(&r.dir).unwrap(),
-        cache: PatchIdCache::new(patch_id_backend(&r.dir, &git)),
-        pool: rayon::ThreadPoolBuilder::new()
-            .num_threads(2)
-            .build()
-            .unwrap(),
-    }
+    Ctx::new(r)
 }
 
 fn names(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| s.to_string()).collect()
-}
-
-/// Classic linear stack: a <- b <- c, each adding one commit.
-fn linear_stack() -> TestRepo {
-    let r = TestRepo::new();
-    r.branch_from("feat/a", "main");
-    r.commit_file("a.txt", "a\n", "feat: a");
-    r.branch_from("feat/b", "feat/a");
-    r.commit_file("b.txt", "b\n", "feat: b");
-    r.branch_from("feat/c", "feat/b");
-    r.commit_file("c.txt", "c\n", "feat: c");
-    r.checkout("main");
-    r
 }
 
 fn by_name<'a>(set: &'a BranchSet, name: &str) -> &'a git_branch_tree::model::Branch {

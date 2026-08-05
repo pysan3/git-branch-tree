@@ -4,37 +4,10 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::TestRepo;
-use git_branch_tree::deps::compute_ancestry_dependencies;
-use git_branch_tree::gitx::{Git, RepoView};
-use git_branch_tree::model::build_branches;
-use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
+use common::{TestRepo, analyse_by_ancestry, parent_map};
 
 fn ancestry_deps(r: &TestRepo, branches: &[&str]) -> BTreeMap<String, Vec<String>> {
-    let git = Git::new(&r.dir);
-    let repo = RepoView::discover(&r.dir).unwrap();
-    let cache = PatchIdCache::new(patch_id_backend(&r.dir, &git));
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-    let base = repo.rev_parse("main").unwrap();
-    let names: Vec<String> = branches.iter().map(|s| s.to_string()).collect();
-    let mut set = build_branches(&names, base, &repo, &cache, &pool).unwrap();
-    compute_ancestry_dependencies(&mut set, &repo, &pool).unwrap();
-
-    set.ids()
-        .map(|b| {
-            let mut parents: Vec<String> = set
-                .get(b)
-                .parents
-                .iter()
-                .map(|&p| set.get(p).name.clone())
-                .collect();
-            parents.sort();
-            (set.get(b).name.clone(), parents)
-        })
-        .collect()
+    parent_map(&analyse_by_ancestry(r, branches))
 }
 
 #[test]

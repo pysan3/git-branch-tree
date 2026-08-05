@@ -7,58 +7,10 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use common::TestRepo;
-use git_branch_tree::blame::SubprocessBlamer;
-use git_branch_tree::deps::compute_dependencies;
-use git_branch_tree::exclude::ExcludeSet;
-use git_branch_tree::gitx::{Git, RepoView};
-use git_branch_tree::model::build_branches;
-use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
+use common::{Harness, TestRepo, analyse, expect_parents, parent_map};
 
-/// Run the real pipeline and report `branch -> sorted dependency parents`.
 fn deps(r: &TestRepo, branches: &[&str]) -> BTreeMap<String, Vec<String>> {
-    let git = Git::new(&r.dir);
-    let repo = RepoView::discover(&r.dir).unwrap();
-    let cache = PatchIdCache::new(patch_id_backend(&r.dir, &git));
-    let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(2)
-        .build()
-        .unwrap();
-    let base = repo.rev_parse("main").unwrap();
-    let names: Vec<String> = branches.iter().map(|s| s.to_string()).collect();
-    let mut set = build_branches(&names, base, &repo, &cache, &pool).unwrap();
-
-    let blamer = SubprocessBlamer { git: git.clone() };
-    let exclude = ExcludeSet::new(&[], true).unwrap();
-    compute_dependencies(
-        &mut set, "main", base, &repo, &git, &blamer, &cache, &exclude, &pool,
-    )
-    .unwrap();
-
-    set.ids()
-        .map(|b| {
-            let mut parents: Vec<String> = set
-                .get(b)
-                .parents
-                .iter()
-                .map(|&p| set.get(p).name.clone())
-                .collect();
-            parents.sort();
-            (set.get(b).name.clone(), parents)
-        })
-        .collect()
-}
-
-fn expect(pairs: &[(&str, &[&str])]) -> BTreeMap<String, Vec<String>> {
-    pairs
-        .iter()
-        .map(|(b, ps)| {
-            (
-                b.to_string(),
-                ps.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-            )
-        })
-        .collect()
+    parent_map(&analyse(r, branches))
 }
 
 #[test]
@@ -77,7 +29,7 @@ fn a_real_chain_keeps_only_nearest_edges() {
 
     assert_eq!(
         deps(&r, &["feat/a", "feat/b", "feat/c"]),
-        expect(&[
+        expect_parents(&[
             ("feat/a", &[]),
             ("feat/b", &["feat/a"]),
             ("feat/c", &["feat/b"]),
@@ -98,7 +50,7 @@ fn branches_stacked_in_git_but_touching_nothing_shared_are_independent() {
 
     assert_eq!(
         deps(&r, &["feat/a", "feat/b"]),
-        expect(&[("feat/a", &[]), ("feat/b", &[])])
+        expect_parents(&[("feat/a", &[]), ("feat/b", &[])])
     );
 }
 
@@ -116,7 +68,7 @@ fn editing_a_base_owned_line_is_not_a_dependency() {
 
     assert_eq!(
         deps(&r, &["feat/a", "feat/b"]),
-        expect(&[("feat/a", &[]), ("feat/b", &[])])
+        expect_parents(&[("feat/a", &[]), ("feat/b", &[])])
     );
 }
 
@@ -135,7 +87,7 @@ fn carrying_a_second_branch_new_file_without_ancestry_is_a_dependency() {
     r.git(&["cherry-pick", "feat/seed"]);
     r.checkout("main");
 
-    let repo = RepoView::discover(&r.dir).unwrap();
+    let repo = &Harness::new(&r).repo;
     let seed = repo.rev_parse("feat/seed").unwrap();
     let carrier = repo.rev_parse("feat/carrier").unwrap();
     assert!(
@@ -145,7 +97,7 @@ fn carrying_a_second_branch_new_file_without_ancestry_is_a_dependency() {
 
     assert_eq!(
         deps(&r, &["feat/seed", "feat/carrier"]),
-        expect(&[("feat/carrier", &["feat/seed"]), ("feat/seed", &[])])
+        expect_parents(&[("feat/carrier", &["feat/seed"]), ("feat/seed", &[])])
     );
 }
 
@@ -165,7 +117,7 @@ fn a_modified_base_file_carried_along_is_not_a_containment_dependency() {
 
     assert_eq!(
         deps(&r, &["feat/one", "feat/two"]),
-        expect(&[("feat/one", &[]), ("feat/two", &[])])
+        expect_parents(&[("feat/one", &[]), ("feat/two", &[])])
     );
 }
 
@@ -212,7 +164,7 @@ fn excluded_paths_do_not_create_edges() {
 
     assert_eq!(
         deps(&r, &["feat/a", "feat/b"]),
-        expect(&[("feat/a", &[]), ("feat/b", &[])]),
+        expect_parents(&[("feat/a", &[]), ("feat/b", &[])]),
         "default excludes must keep lockfile churn out of the graph"
     );
 }

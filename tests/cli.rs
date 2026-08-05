@@ -2,55 +2,14 @@
 
 mod common;
 
-use assert_cmd::Command;
-use common::TestRepo;
+use common::{DIAMOND as ALL_C, Gbt, TestRepo, diamond_on_base as diamond, mask_shas};
 
-/// Run the binary in `r` with `--no-fetch` (fixtures have no origin) and return stdout.
+/// Run the binary and mask the short shas, which move whenever a fixture changes.
 fn run(r: &TestRepo, args: &[&str]) -> String {
-    let out = Command::cargo_bin("git-branch-tree")
-        .unwrap()
-        .current_dir(&r.dir)
-        .arg("--no-fetch")
-        .args(args)
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
-    normalise(&stdout)
+    mask_shas(&Gbt::new(r).args(args).stdout())
 }
 
-/// Replace the 10-hex short shas in the rebase block, which change whenever the
-/// fixture's content does, so the assertions stay about structure.
-fn normalise(s: &str) -> String {
-    s.split(' ')
-        .map(|tok| {
-            if tok.len() == 10 && tok.bytes().all(|b| b.is_ascii_hexdigit()) {
-                "<SHA>"
-            } else {
-                tok
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-/// A genuine diamond: root owns line 2, left owns line 1, right owns line 3, and top
-/// edits lines 1 and 3 so it depends on both left and right.
-fn diamond() -> TestRepo {
-    let r = TestRepo::new();
-    r.commit_file("f.txt", "r1\nr2\nr3\n", "chore: seed");
-    r.branch_from("feat/root", "main");
-    r.commit_file("f.txt", "r1\nR2\nr3\n", "feat: root");
-    r.branch_from("feat/left", "feat/root");
-    r.commit_file("f.txt", "L1\nR2\nr3\n", "feat: left");
-    r.branch_from("feat/right", "feat/left");
-    r.commit_file("f.txt", "L1\nR2\nG3\n", "feat: right");
-    r.branch_from("feat/top", "feat/right");
-    r.commit_file("f.txt", "T1\nR2\nT3\n", "feat: top");
-    r.checkout("main");
-    r
-}
-
-const ALL: &[&str] = &["feat/root", "feat/left", "feat/right", "feat/top"];
+const ALL: &[&str] = ALL_C;
 
 #[test]
 fn reports_tree_and_rebase_block() {
@@ -141,27 +100,17 @@ fn a_squash_merge_sets_the_skip_point_by_content() {
     r.commit_file("f.txt", "A1\nB2\nl3\n", "feat: next");
     r.squash_merge_into_main("feat/landed");
 
-    // Deliberately not normalised: the exact skip commit is the assertion.
-    let out = String::from_utf8(
-        Command::cargo_bin("git-branch-tree")
-            .unwrap()
-            .current_dir(&r.dir)
-            .args([
-                "--no-fetch",
-                "--format",
-                "ascii",
-                "feat/landed",
-                "feat/next",
-                "--merged",
-                "feat/landed",
-            ])
-            .assert()
-            .success()
-            .get_output()
-            .stdout
-            .clone(),
-    )
-    .unwrap();
+    // Deliberately unmasked: the exact skip commit is the assertion.
+    let out = Gbt::new(&r)
+        .args(&[
+            "--format",
+            "ascii",
+            "feat/landed",
+            "feat/next",
+            "--merged",
+            "feat/landed",
+        ])
+        .stdout();
 
     // The landed branch is the base now: gone from the tree, noted as skipped.
     assert!(
@@ -242,26 +191,12 @@ fn nothing_to_rebase_says_so() {
 fn errors_go_to_stderr_with_exit_one() {
     let r = diamond();
 
-    let assert = Command::cargo_bin("git-branch-tree")
-        .unwrap()
-        .current_dir(&r.dir)
-        .args(["--no-fetch", "ghost"])
-        .assert()
-        .failure()
-        .code(1);
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
-    assert_eq!(stderr, "error: branch 'ghost' does not exist\n");
-
-    let assert = Command::cargo_bin("git-branch-tree")
-        .unwrap()
-        .current_dir(&r.dir)
-        .arg("--no-fetch")
-        .assert()
-        .failure()
-        .code(1);
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
     assert_eq!(
-        stderr,
+        Gbt::new(&r).args(&["ghost"]).failure(),
+        "error: branch 'ghost' does not exist\n"
+    );
+    assert_eq!(
+        Gbt::new(&r).args(&[]).failure(),
         "error: no branches given; pass branch name(s) or --prefix\n"
     );
 }
@@ -336,13 +271,9 @@ fn an_empty_suffix_appends_nothing() {
 #[test]
 fn a_bad_placeholder_is_rejected_before_any_git_work() {
     let r = diamond();
-    let assert = Command::cargo_bin("git-branch-tree")
-        .unwrap()
-        .current_dir(&r.dir)
-        .args(["--no-fetch", "feat/root", "--on-base", "echo {nope}"])
-        .assert()
-        .failure();
-    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let stderr = Gbt::new(&r)
+        .args(&["feat/root", "--on-base", "echo {nope}"])
+        .any_failure();
     assert!(stderr.contains("unknown placeholder '{nope}'"), "{stderr}");
     assert!(
         stderr.contains("{branch}, {onto}, {base}, {up}"),
@@ -396,18 +327,9 @@ fn runs_from_a_subdirectory() {
     let sub = r.dir.join("nested/deeper");
     std::fs::create_dir_all(&sub).unwrap();
 
-    let out = Command::cargo_bin("git-branch-tree")
-        .unwrap()
-        .current_dir(&sub)
-        .args([
-            "--no-fetch",
-            "--format",
-            "ascii",
-            "--no-rebase",
-            "feat/root",
-        ])
-        .assert()
-        .success();
-    let stdout = String::from_utf8(out.get_output().stdout.clone()).unwrap();
+    let stdout = Gbt::new(&r)
+        .cwd(&sub)
+        .args(&["--format", "ascii", "--no-rebase", "feat/root"])
+        .stdout();
     assert!(stdout.contains("# base: main"), "{stdout}");
 }
