@@ -10,9 +10,20 @@ name: release
 #
 # This still needs release-plz to hold a PAT: events caused by GITHUB_TOKEN do not start
 # workflows, so a release it created would never reach this file.
+#
+# The manual trigger exists because a release is published exactly once: if a build fails
+# - a runner outage, a target that stops compiling - there is otherwise no way to attach
+# the binaries afterwards short of deleting and recreating the release of a version people
+# may already have installed.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach binaries to, e.g. v0.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -39,7 +50,12 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-2025
     steps:
+      # On a release event the default ref is already the tag; a manual run has to say
+      # which tag it means, so that binaries are always built from the released code and
+      # never from whatever main happens to be.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
         with:
           target: ${{ matrix.target }}
@@ -48,6 +64,9 @@ jobs:
           bin: git-branch-tree
           target: ${{ matrix.target }}
           archive: $bin-$target
+          # Which release to attach to. Empty on a release event, where the action infers
+          # it from the event payload.
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || '' }}
           # .tar.gz everywhere except Windows, matching the binstall metadata in
           # Cargo.toml.
           tar: unix
