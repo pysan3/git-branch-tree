@@ -11,3 +11,15 @@ them by hand.
 <!-- next-header -->
 
 ## [Unreleased]
+
+## [0.1.1](https://github.com/pysan3/git-branch-tree/compare/v0.1.0...v0.1.1) - 2026-08-05
+
+### Added
+
+- check runtime dependencies before doing any work ([#7](https://github.com/pysan3/git-branch-tree/pull/7))
+
+### Other
+
+- trigger binary uploads on the release, and stop packaging repo infrastructure ([#5](https://github.com/pysan3/git-branch-tree/pull/5))
+- pin GitHub Actions to commit hashes and update checkout to v7 ([#2](https://github.com/pysan3/git-branch-tree/pull/2))
+- explain that the PR title drives releases ([#3](https://github.com/pysan3/git-branch-tree/pull/3))
