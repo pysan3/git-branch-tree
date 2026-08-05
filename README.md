@@ -167,7 +167,7 @@ depended only on them is repointed at the base.
 | `--no-default-exclude` | Keep lockfiles and generated files, which are skipped by default |
 | `--skip-ambiguous` | Omit branches needing more than one unmerged parent; list them instead |
 | `--test <CMD>` | Verify each base-targeted branch really works on the base |
-| `--test-jobs <N>` | Workers for `--test` (default: `-j`); `1` to serialise |
+| `--test-jobs <N>` | Workers for `--test` (default: `1`) — each holds a full worktree |
 | `--test-patch <P>` | `git apply` this patch in each worktree before `--test` |
 | `--on-base <CMD>` | Command appended after each branch that lands on the base |
 | `--on-parent <CMD>` | Command appended after each branch that lands on a parent |

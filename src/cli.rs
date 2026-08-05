@@ -128,9 +128,11 @@ pub struct Cli {
     #[arg(long, value_name = "CMD")]
     pub test: Option<String>,
 
-    /// worker count for --test (default: -j). Use 1 to run tests serially, e.g. so they
-    /// can safely share a single Bazel --output_base; prefer a shared --disk_cache
-    /// instead, which reuses artifacts while staying parallel
+    /// worker count for --test [default: 1]. Each worker holds its own worktree - a
+    /// full checkout, plus whatever the build writes into it - so raise this
+    /// deliberately once you know what one costs on disk. Serial also lets tests share
+    /// a single Bazel --output_base; a shared --disk_cache is usually better, since it
+    /// reuses artifacts while staying parallel
     #[arg(long, value_name = "N")]
     pub test_jobs: Option<usize>,
 
@@ -165,9 +167,12 @@ impl Cli {
         self.jobs.max(1)
     }
 
-    /// Workers for `--test`, defaulting to `-j`.
+    /// Workers for `--test`. Defaults to one, unlike `-j`: a git worker costs a
+    /// subprocess, but a test worker costs an entire worktree plus whatever the build
+    /// writes into it, which on a large repository is gigabytes apiece. Parallel test
+    /// runs are worth opting into, not stumbling into.
     pub fn test_job_count(&self) -> usize {
-        self.test_jobs.unwrap_or(self.jobs).max(1)
+        self.test_jobs.unwrap_or(1).max(1)
     }
 
     /// `--merged` accepts both space- and comma-separated names, so the flag can be
@@ -228,6 +233,15 @@ mod tests {
         assert_eq!(parse(&["-j", "0", "x"]).job_count(), 1);
         assert_eq!(parse(&["-j", "7", "x"]).job_count(), 7);
         assert_eq!(parse(&["x"]).job_count(), default_jobs());
+    }
+
+    #[test]
+    fn test_jobs_defaults_to_one_regardless_of_j() {
+        // Not tied to -j: a test worker costs a whole worktree, not a subprocess.
+        assert_eq!(parse(&["x"]).test_job_count(), 1);
+        assert_eq!(parse(&["-j", "16", "x"]).test_job_count(), 1);
+        assert_eq!(parse(&["--test-jobs", "4", "x"]).test_job_count(), 4);
+        assert_eq!(parse(&["--test-jobs", "0", "x"]).test_job_count(), 1);
     }
 
     #[test]
