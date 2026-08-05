@@ -12,6 +12,12 @@ them by hand.
 
 ## [Unreleased]
 
+## [0.2.2](https://github.com/pysan3/git-branch-tree/compare/v0.2.1...v0.2.2) - 2026-08-05
+
+### Other
+
+- relicense under MPL-2.0 ([#11](https://github.com/pysan3/git-branch-tree/pull/11))
+
 ## [0.2.1](https://github.com/pysan3/git-branch-tree/compare/v0.2.0...v0.2.1) - 2026-08-05
 
 ### Other
