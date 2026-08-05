@@ -24,6 +24,14 @@ esac"#;
 /// Nothing is merged.
 const MERGED_NONE: &str = "echo 0";
 
+/// Satisfies preflight - it is installed and authenticated - then fails the actual
+/// query, which is the case "a failing query must be surfaced" means to exercise.
+const QUERY_FAILS: &str = r#"case "$1" in
+  --version) echo "gh version 2.0.0" ;;
+  auth) exit 0 ;;
+  *) echo "gh: could not resolve repository" >&2; exit 1 ;;
+esac"#;
+
 /// Records every branch it was asked about, so a test can assert the tool asks about
 /// the branches it is analysing rather than pulling a bulk list.
 const RECORD_QUERIES: &str = r#"for a in "$@"; do
@@ -169,11 +177,11 @@ fn without_the_flag_gh_is_never_consulted() {
 #[test]
 fn a_failing_gh_is_reported_not_swallowed() {
     let r = stack();
-    let bin = stub_gh(&r, "echo 'gh: not logged in' >&2; exit 1");
+    let bin = stub_gh(&r, QUERY_FAILS);
 
     let stderr = gbt(&r, &path_with(&bin), &["--auto-merged", "feat/a", "feat/b"]).failure();
     assert!(stderr.contains("error: gh pr list"), "{stderr}");
-    assert!(stderr.contains("not logged in"), "{stderr}");
+    assert!(stderr.contains("could not resolve repository"), "{stderr}");
 }
 
 #[test]
@@ -195,9 +203,10 @@ fn a_missing_gh_explains_the_flag() {
     )
     .failure();
     assert!(
-        stderr.ends_with("error: gh (GitHub CLI) not found; install it or omit --auto-merged\n"),
+        stderr.contains("--auto-merged needs the gh CLI, which was not found"),
         "{stderr}"
     );
+    assert!(stderr.contains("or drop --auto-merged"), "{stderr}");
 }
 
 /// Absolute path of the real git, so the shim above can forward to it.

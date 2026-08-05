@@ -191,7 +191,7 @@ fn a_missing_test_patch_is_rejected_up_front() {
                 "feat/b",
             ])
             .failure(),
-        "error: --test-patch file not found: /nonexistent/fix.patch\n"
+        "error: unmet requirement:\n  - --test-patch file not found: /nonexistent/fix.patch\n    give a path to an existing patch file\n"
     );
 }
 
