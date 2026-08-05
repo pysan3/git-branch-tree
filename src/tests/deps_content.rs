@@ -3,11 +3,9 @@
 //! Every case here is one the ancestry-only view gets wrong: branches that look
 //! stacked but are independent, and branches that look independent but are not.
 
-mod common;
-
 use std::collections::BTreeMap;
 
-use common::{Harness, TestRepo, analyse, expect_parents, parent_map};
+use crate::testfix::{Harness, TestRepo, analyse, expect_parents, parent_map};
 
 fn deps(r: &TestRepo, branches: &[&str]) -> BTreeMap<String, Vec<String>> {
     parent_map(&analyse(r, branches))

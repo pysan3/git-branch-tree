@@ -8,5 +8,5 @@
 pub mod cmd;
 pub mod repo;
 
-pub use cmd::{CmdError, Git};
-pub use repo::{RawChange, RepoView, Sha};
+pub use cmd::Git;
+pub use repo::{RepoView, Sha};

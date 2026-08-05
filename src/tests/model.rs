@@ -1,10 +1,8 @@
 //! Branch model construction and input-mode resolution against real repositories.
 
-mod common;
-
-use common::{Harness as Ctx, TestRepo, disjoint_stack as linear_stack};
-use git_branch_tree::input::resolve_branches;
-use git_branch_tree::model::{BranchSet, build_branches};
+use crate::input::resolve_branches;
+use crate::model::{BranchSet, build_branches};
+use crate::testfix::{Harness as Ctx, TestRepo, disjoint_stack as linear_stack};
 
 fn ctx(r: &TestRepo) -> Ctx {
     Ctx::new(r)
@@ -14,7 +12,7 @@ fn names(v: &[&str]) -> Vec<String> {
     v.iter().map(|s| s.to_string()).collect()
 }
 
-fn by_name<'a>(set: &'a BranchSet, name: &str) -> &'a git_branch_tree::model::Branch {
+fn by_name<'a>(set: &'a BranchSet, name: &str) -> &'a crate::model::Branch {
     set.get(set.by_name(name).expect("branch present"))
 }
 

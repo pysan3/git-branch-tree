@@ -1,14 +1,12 @@
 //! Renderer output, pinned exactly - it is the tool's entire user interface.
 
-mod common;
-
 use std::collections::HashSet;
 
-use common::{
+use crate::plan::rebase_plan;
+use crate::render::{render_ascii, render_header, render_mermaid};
+use crate::testfix::{
     DIAMOND, TestRepo, analyse as analysed, diamond_under_root as diamond_repo, names as merged,
 };
-use git_branch_tree::plan::rebase_plan;
-use git_branch_tree::render::{render_ascii, render_header, render_mermaid};
 
 #[test]
 fn ascii_renders_a_chain_as_nested_branches() {

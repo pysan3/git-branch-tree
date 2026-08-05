@@ -5,7 +5,6 @@ pub mod content;
 pub mod reduce;
 
 pub use ancestry::compute_ancestry_dependencies;
-pub use reduce::transitive_reduction;
 
 use crate::blame::Blamer;
 use crate::exclude::ExcludeSet;

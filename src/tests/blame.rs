@@ -4,12 +4,10 @@
 //! which lines get blamed, and a one-line drift would attribute a line to the wrong
 //! commit and flip a dependency edge.
 
-mod common;
-
-use common::TestRepo;
-use git_branch_tree::blame::{Blamer, SubprocessBlamer};
-use git_branch_tree::gitx::{Git, RepoView, Sha};
-use git_branch_tree::hunks::{diff_unified0, parse_old_side_hunks};
+use crate::blame::{Blamer, SubprocessBlamer};
+use crate::gitx::{Git, RepoView, Sha};
+use crate::hunks::{diff_unified0, parse_old_side_hunks};
+use crate::testfix::TestRepo;
 
 fn blamer(r: &TestRepo) -> SubprocessBlamer {
     SubprocessBlamer {

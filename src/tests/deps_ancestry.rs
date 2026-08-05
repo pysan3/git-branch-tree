@@ -1,10 +1,8 @@
 //! `--ancestry` mode: trust the git graph instead of the content heuristics.
 
-mod common;
-
 use std::collections::BTreeMap;
 
-use common::{TestRepo, analyse_by_ancestry, parent_map};
+use crate::testfix::{TestRepo, analyse_by_ancestry, parent_map};
 
 fn ancestry_deps(r: &TestRepo, branches: &[&str]) -> BTreeMap<String, Vec<String>> {
     parent_map(&analyse_by_ancestry(r, branches))
