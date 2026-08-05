@@ -7,7 +7,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use crate::base::{detect_base, update_base};
 use crate::blame::SubprocessBlamer;
@@ -32,6 +32,10 @@ pub fn run(cli: Cli) -> Result<()> {
     let repo = RepoView::discover(&cwd)?;
     let workdir = repo.work_dir()?;
     let git = Git::new(&workdir);
+
+    // Before the first expensive step, so a missing dependency costs a moment rather
+    // than most of a minute.
+    crate::preflight::check(&cli, &git)?;
 
     let base = detect_base(cli.base.as_deref(), &repo, &git)?;
     // Refresh the base FIRST, so every merge-base and diff below is computed against
@@ -104,16 +108,12 @@ pub fn run(cli: Cli) -> Result<()> {
         plan = rebase_plan(&set, &base, &merged_set, &merged_pids);
 
         if let Some(cmd) = &cli.test {
-            let patch = match &cli.test_patch {
-                Some(p) => {
-                    let abs = std::path::absolute(p).unwrap_or_else(|_| p.clone());
-                    if !abs.is_file() {
-                        bail!("--test-patch file not found: {}", p.display());
-                    }
-                    Some(abs)
-                }
-                None => None,
-            };
+            // Existence was checked by preflight; this only makes the path absolute,
+            // since it is applied from inside a worktree.
+            let patch = cli
+                .test_patch
+                .as_ref()
+                .map(|p| std::path::absolute(p).unwrap_or_else(|_| p.clone()));
             failed = run_tests(
                 &set,
                 &plan,

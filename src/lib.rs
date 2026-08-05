@@ -20,6 +20,7 @@ pub mod input;
 pub mod model;
 pub mod patchid;
 pub mod plan;
+pub mod preflight;
 pub mod render;
 pub mod suffix;
 pub mod testrun;
