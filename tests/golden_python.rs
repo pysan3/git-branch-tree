@@ -4,7 +4,7 @@
 //! machine. Run it with:
 //!
 //! ```text
-//! GBT_PYTHON=~/dotfiles/bin/git-branch-tree cargo test --test golden_python -- --ignored
+//! GBT_PYTHON=/path/to/git-branch-tree cargo test --test golden_python -- --ignored
 //! ```
 //!
 //! The point is not that the Rust port is *similar*: the emitted rebase block gets
