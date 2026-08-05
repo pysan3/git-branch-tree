@@ -41,13 +41,9 @@ pub fn rebase_plan(
         let Some(prev) = branch.prev else {
             continue; // independent: sits directly on the base, nothing to flatten
         };
-        let mut open_parents: Vec<BranchId> = branch
-            .parents
-            .iter()
-            .filter(|&&p| !merged.contains(&set.get(p).name))
-            .copied()
-            .collect();
-        open_parents.sort_by(|&a, &b| set.rank(b).cmp(&set.rank(a))); // rank desc
+        // Same definition the tree is drawn from, so a branch always rebases onto the
+        // parent it is shown under.
+        let open_parents = set.open_parents(b, merged);
         let onto = open_parents
             .first()
             .map(|&p| set.get(p).name.clone())

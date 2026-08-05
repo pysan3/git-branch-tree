@@ -11,6 +11,7 @@ use git_branch_tree::exclude::ExcludeSet;
 use git_branch_tree::gitx::{Git, RepoView};
 use git_branch_tree::model::{BranchSet, build_branches};
 use git_branch_tree::patchid::{PatchIdCache, patch_id_backend};
+use git_branch_tree::plan::rebase_plan;
 use git_branch_tree::render::{render_ascii, render_header, render_mermaid};
 
 /// Run the full analysis so the renderers are exercised on real graphs.
@@ -180,6 +181,37 @@ fn mermaid_sanitises_branch_names_into_node_ids() {
         "{m}"
     );
     assert!(m.contains("b_main --> b_PROJ_412_feat_thing"), "{m}");
+}
+
+#[test]
+fn the_tree_and_the_plan_agree_on_where_each_branch_hangs() {
+    // These were computed independently once - the tree took the highest-ranked open
+    // parent one way, the planner another - so they could drift into drawing a branch
+    // under one parent while rebasing it onto a different one. They now share a
+    // definition; this pins that they cannot disagree, under every merge state.
+    let r = diamond_repo();
+    let set = analysed(&r, &["feat/root", "feat/left", "feat/right", "feat/top"]);
+
+    for landed in [
+        merged(&[]),
+        merged(&["feat/root"]),
+        merged(&["feat/root", "feat/left"]),
+        merged(&["feat/left"]),
+    ] {
+        let plan = rebase_plan(&set, "main", &landed, &std::collections::BTreeSet::new());
+        for entry in &plan {
+            let drawn = set
+                .primary_open_parent(entry.branch, &landed)
+                .map_or_else(|| "main".to_string(), |p| set.get(p).name.clone());
+            assert_eq!(
+                entry.onto,
+                drawn,
+                "{} is drawn under {drawn} but rebases onto {} (merged: {landed:?})",
+                set.get(entry.branch).name,
+                entry.onto
+            );
+        }
+    }
 }
 
 #[test]

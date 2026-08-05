@@ -4,7 +4,7 @@
 //! nodes: `Copy` ids, deterministic `BTreeSet` ordering so the rendered tree never
 //! shuffles between runs, and `Send`/`Sync` for free in the parallel phases.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use anyhow::Result;
 use rayon::prelude::*;
@@ -68,6 +68,33 @@ impl BranchSet {
         let mut ids: Vec<BranchId> = self.ids().collect();
         ids.sort_by(|&a, &b| self.rank(a).cmp(&self.rank(b)));
         ids
+    }
+
+    /// Dependency parents that have not merged, highest rank first.
+    ///
+    /// A merged parent has collapsed into the base, so it is neither a rebase target
+    /// nor a node in the tree. The first element is the branch's *primary* parent: the
+    /// one it is drawn under and the one it rebases onto.
+    pub fn open_parents(&self, id: BranchId, merged: &HashSet<String>) -> Vec<BranchId> {
+        let mut open: Vec<BranchId> = self
+            .get(id)
+            .parents
+            .iter()
+            .filter(|&&p| !merged.contains(&self.get(p).name))
+            .copied()
+            .collect();
+        open.sort_by(|&a, &b| self.rank(b).cmp(&self.rank(a)));
+        open
+    }
+
+    /// The parent this branch hangs off, or `None` once every dependency has landed and
+    /// it sits directly on the base.
+    ///
+    /// Deliberately shared by the renderers and the planner. Computing "highest-ranked
+    /// open parent" separately in each is how the drawn tree and the emitted rebase
+    /// come to disagree about where a branch belongs.
+    pub fn primary_open_parent(&self, id: BranchId, merged: &HashSet<String>) -> Option<BranchId> {
+        self.open_parents(id, merged).into_iter().next()
     }
 }
 

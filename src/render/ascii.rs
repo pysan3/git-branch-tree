@@ -4,8 +4,6 @@ use std::collections::HashSet;
 
 use crate::model::{BranchId, BranchSet};
 
-use super::{display_parents, display_primary};
-
 /// Render the dependency forest as an indented ASCII tree rooted at the base.
 ///
 /// The graph is a DAG (and, in tangled repos, may even carry a cycle remnant), so:
@@ -21,7 +19,7 @@ pub fn render_ascii(set: &BranchSet, base: &str, merged: &HashSet<String>) -> St
 
     let mut children: Vec<Vec<BranchId>> = vec![Vec::new(); set.branches.len()];
     for &b in &shown {
-        if let Some(parent) = display_primary(set, b, merged)
+        if let Some(parent) = set.primary_open_parent(b, merged)
             && parent != b
         {
             children[parent.0].push(b);
@@ -45,8 +43,8 @@ pub fn render_ascii(set: &BranchSet, base: &str, merged: &HashSet<String>) -> St
     }
     let mut order: Vec<BranchId> = shown.clone();
     order.sort_by(|&a, &b| {
-        let ka = (!display_parents(set, a, merged).is_empty(), set.rank(a));
-        let kb = (!display_parents(set, b, merged).is_empty(), set.rank(b));
+        let ka = (!set.open_parents(a, merged).is_empty(), set.rank(a));
+        let kb = (!set.open_parents(b, merged).is_empty(), set.rank(b));
         ka.cmp(&kb)
     });
     let mut entries = Vec::new();
@@ -79,9 +77,9 @@ pub fn render_ascii(set: &BranchSet, base: &str, merged: &HashSet<String>) -> St
             return;
         }
         printed[node.0] = true;
-        let dp = display_parents(set, node, merged);
+        let dp = set.open_parents(node, merged);
         let extra = if dp.len() > 1 {
-            let primary = display_primary(set, node, merged);
+            let primary = set.primary_open_parent(node, merged);
             let mut others: Vec<&str> = dp
                 .iter()
                 .filter(|&&p| Some(p) != primary)

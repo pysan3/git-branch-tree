@@ -4,8 +4,6 @@ use std::collections::HashSet;
 
 use crate::model::{BranchId, BranchSet};
 
-use super::display_parents;
-
 fn nid(name: &str) -> String {
     let sanitized: String = name
         .chars()
@@ -33,7 +31,7 @@ pub fn render_mermaid(set: &BranchSet, base: &str, merged: &HashSet<String>) -> 
     }
     for &b in &shown {
         let name = &set.get(b).name;
-        let dp = display_parents(set, b, merged);
+        let dp = set.open_parents(b, merged);
         if dp.is_empty() {
             lines.push(format!("  {} --> {}", nid(base), nid(name)));
         } else {

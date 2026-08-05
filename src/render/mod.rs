@@ -8,38 +8,11 @@ pub mod ascii;
 pub mod mermaid;
 pub mod rebase;
 
-use std::collections::HashSet;
-
-use crate::model::{BranchId, BranchSet};
+use crate::model::BranchSet;
 
 pub use ascii::render_ascii;
 pub use mermaid::render_mermaid;
 pub use rebase::render_rebase;
-
-/// Dependency parents excluding merged ones (which have collapsed into the base).
-pub(crate) fn display_parents(
-    set: &BranchSet,
-    b: BranchId,
-    merged: &HashSet<String>,
-) -> Vec<BranchId> {
-    set.get(b)
-        .parents
-        .iter()
-        .filter(|&&p| !merged.contains(&set.get(p).name))
-        .copied()
-        .collect()
-}
-
-/// Nearest non-merged parent, or `None` when the branch now hangs off the base.
-pub(crate) fn display_primary(
-    set: &BranchSet,
-    b: BranchId,
-    merged: &HashSet<String>,
-) -> Option<BranchId> {
-    display_parents(set, b, merged)
-        .into_iter()
-        .max_by(|&a, &b| set.rank(a).cmp(&set.rank(b)))
-}
 
 /// The report header printed above the trees.
 pub fn render_header(set: &BranchSet, base: &str, auto_merged: &[String]) -> String {
