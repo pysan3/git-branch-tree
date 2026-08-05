@@ -83,16 +83,16 @@ Needs `git` on `PATH`. `--auto-merged` additionally needs the
 
 ```sh
 # one branch: it, plus every local branch stacked on top of it
-git-branch-tree PROJ-412/api
+git-branch-tree PROJ-123/api
 
 # several branches: exactly those
 git-branch-tree feat/a feat/b feat/c
 
 # every branch sharing a ticket prefix
-git-branch-tree --prefix PROJ-412
+git-branch-tree --prefix PROJ-123
 
 # ...or the whole ticket family, by leading-letter group
-git-branch-tree --alpha --prefix PROJ-412
+git-branch-tree --alpha --prefix PROJ-123
 ```
 
 Output is Mermaid by default (paste it into a PR description and GitHub renders the
@@ -133,7 +133,7 @@ pass tests on the base, it is dropped from the block and listed with the reason,
 with anything stacked on it.
 
 ```sh
-git-branch-tree --prefix PROJ-412 --test 'cargo test --quiet'
+git-branch-tree --prefix PROJ-123 --test 'cargo test --quiet'
 ```
 
 ## Squash-merges
@@ -143,8 +143,8 @@ your branch. A naive rebase would replay those commits and conflict with the squ
 version. Tell the tool what landed and it finds the skip point by content:
 
 ```sh
-git-branch-tree --prefix PROJ-412 --merged PROJ-412/api
-git-branch-tree --prefix PROJ-412 --auto-merged   # ask GitHub instead
+git-branch-tree --prefix PROJ-123 --merged PROJ-123/api
+git-branch-tree --prefix PROJ-123 --auto-merged   # ask GitHub instead
 ```
 
 Merged branches drop out of the tree — they *are* the base now — and anything that
@@ -156,7 +156,7 @@ depended only on them is repointed at the base.
 | --- | --- |
 | `<branch>...` | One branch (plus everything stacked on it), or several exact branches |
 | `--prefix <P>...` | Every local branch matching any prefix |
-| `--alpha` | With `--prefix`, match by leading-letter group (`PROJ-412` → every `PROJ-*`) |
+| `--alpha` | With `--prefix`, match by leading-letter group (`PROJ-123` → every `PROJ-*`) |
 | `--base <ref>` | Base branch (default: auto-detect via `origin/HEAD`, then `main`/`master`) |
 | `--merged <B>...` | Branches already squash-merged into the base (space- or comma-separated) |
 | `--auto-merged` | Also treat as merged any branch whose GitHub PR has merged (needs `gh`) |
@@ -181,7 +181,7 @@ Each rebase is followed by whatever finishes the job in your setup. The defaults
 are `{branch}`, `{onto}`, `{base}` and `{up}`:
 
 ```sh
-git-branch-tree --prefix PROJ-412 \
+git-branch-tree --prefix PROJ-123 \
   --on-base   'gh pr create --base {base} --head {branch} --fill' \
   --on-parent 'gh pr edit {branch} --base {onto}'
 ```
@@ -191,10 +191,10 @@ Repeat a flag to chain several commands; pass an empty value to append nothing.
 ## The loop
 
 ```sh
-git-branch-tree --prefix PROJ-412 --auto-merged --test 'make test'   # look
+git-branch-tree --prefix PROJ-123 --auto-merged --test 'make test'   # look
 <paste the block>                                                   # flatten
 # ...reviews land, some branches merge...
-git-branch-tree --prefix PROJ-412 --auto-merged                      # look again
+git-branch-tree --prefix PROJ-123 --auto-merged                      # look again
 ```
 
 Every run recomputes from scratch against a freshly fetched base, so it stays correct as

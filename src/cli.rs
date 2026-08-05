@@ -75,6 +75,7 @@ pub struct Cli {
     pub branches: Vec<String>,
 
     /// analyse all local branches with any of these prefixes
+    /// (e.g. --prefix PROJ-12{3..5})
     #[arg(long, num_args = 1.., value_name = "PREFIX")]
     pub prefix: Vec<String>,
 
