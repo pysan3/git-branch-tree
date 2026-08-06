@@ -12,6 +12,16 @@ them by hand.
 
 ## [Unreleased]
 
+## [1.0.2](https://github.com/pysan3/git-branch-tree/compare/v1.0.1...v1.0.2) - 2026-08-06
+
+### Fixed
+
+- reject --prefix combined with branch arguments ([#21](https://github.com/pysan3/git-branch-tree/pull/21))
+
+### Other
+
+- spawn external tools through one generic entry point ([#19](https://github.com/pysan3/git-branch-tree/pull/19))
+
 ## [1.0.1](https://github.com/pysan3/git-branch-tree/compare/v1.0.0...v1.0.1) - 2026-08-06
 
 ### Other
