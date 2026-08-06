@@ -26,81 +26,101 @@ pub fn prefix_matches(branch: &str, prefixes: &[String], alpha: bool) -> bool {
     }
 }
 
-/// Resolve the concrete list of branch names to analyse.
+/// Where the branch list comes from.
 ///
-/// - `--prefix P...`: every local branch matching any prefix (or `--alpha` group).
-/// - one branch: that branch plus every local branch stacked on it — i.e. carrying
-///   all of its changes *by content* (patch-ids), not by ancestry.
-/// - several branches: exactly those, deduped, order kept.
+/// Picking the mode belongs to [`crate::cli::Cli`], which owns the flags. Keeping it
+/// there means nothing below re-derives the user's intent from which arguments happen
+/// to be non-empty - the shape that let `--prefix P feat/a` silently drop `feat/a`.
+#[derive(Debug)]
+pub enum InputMode<'a> {
+    Prefix { prefixes: &'a [String], alpha: bool },
+    StackedOn(&'a str),
+    Explicit(&'a [String]),
+}
+
+/// Resolve the concrete list of branch names to analyse.
 pub fn resolve_branches(
-    branches: &[String],
-    prefixes: &[String],
-    alpha: bool,
+    mode: InputMode<'_>,
     base: Sha,
     repo: &RepoView,
     cache: &PatchIdCache,
     pool: &rayon::ThreadPool,
 ) -> Result<Vec<String>> {
-    let locals = repo.local_branches()?;
-
-    if !prefixes.is_empty() {
-        let names: Vec<String> = locals
-            .iter()
-            .filter(|b| prefix_matches(b, prefixes, alpha))
-            .cloned()
-            .collect();
-        if names.is_empty() {
-            let how = if alpha {
-                "leading-letter group"
-            } else {
-                "prefix(es)"
-            };
-            bail!("no local branches match {how}: {}", prefixes.join(", "));
-        }
-        return Ok(names);
+    match mode {
+        InputMode::Prefix { prefixes, alpha } => by_prefix(repo, prefixes, alpha),
+        InputMode::StackedOn(root) => stacked_on(root, base, repo, cache, pool),
+        InputMode::Explicit(names) => explicit(names, repo),
     }
+}
 
-    if branches.len() == 1 {
-        let root = &branches[0];
-        if !repo.branch_exists(root) {
-            bail!("branch '{root}' does not exist");
-        }
-        // One batched patch-id pass over every local branch, then subset tests.
-        let lists = prime_names(repo, base, &locals, cache, pool)?;
-        let patchset = |name: &str| -> BTreeSet<PatchId> {
-            lists
-                .get(name)
-                .into_iter()
-                .flatten()
-                .filter_map(|&s| cache.get(s))
-                .collect()
+/// Every local branch matching any prefix (or `--alpha` leading-letter group).
+pub fn by_prefix(repo: &RepoView, prefixes: &[String], alpha: bool) -> Result<Vec<String>> {
+    let names: Vec<String> = repo
+        .local_branches()?
+        .into_iter()
+        .filter(|b| prefix_matches(b, prefixes, alpha))
+        .collect();
+    if names.is_empty() {
+        let how = if alpha {
+            "leading-letter group"
+        } else {
+            "prefix(es)"
         };
-        let root_pids = patchset(root);
-        let mut result: BTreeSet<&str> = BTreeSet::from([root.as_str()]);
-        // b is stacked on root iff it carries all of root's changes (content, not sha).
-        for b in &locals {
-            if b != root && !root_pids.is_empty() && root_pids.is_subset(&patchset(b)) {
-                result.insert(b);
-            }
-        }
-        return Ok(result.into_iter().map(String::from).collect());
+        bail!("no local branches match {how}: {}", prefixes.join(", "));
     }
+    Ok(names)
+}
 
-    if branches.len() >= 2 {
-        let mut seen = BTreeSet::new();
-        let mut names = Vec::new();
-        for b in branches {
-            if !repo.branch_exists(b) {
-                bail!("branch '{b}' does not exist");
-            }
-            if seen.insert(b.as_str()) {
-                names.push(b.clone());
-            }
-        }
-        return Ok(names);
+/// `root` plus every local branch stacked on it - i.e. carrying all of its changes *by
+/// content* (patch-ids), not by ancestry.
+///
+/// The only mode needing the base, the patch-id cache and the pool: it patch-ids every
+/// local branch to answer the subset test.
+pub fn stacked_on(
+    root: &str,
+    base: Sha,
+    repo: &RepoView,
+    cache: &PatchIdCache,
+    pool: &rayon::ThreadPool,
+) -> Result<Vec<String>> {
+    if !repo.branch_exists(root) {
+        bail!("branch '{root}' does not exist");
     }
+    let locals = repo.local_branches()?;
+    // One batched patch-id pass over every local branch, then subset tests.
+    let lists = prime_names(repo, base, &locals, cache, pool)?;
+    let patchset = |name: &str| -> BTreeSet<PatchId> {
+        lists
+            .get(name)
+            .into_iter()
+            .flatten()
+            .filter_map(|&s| cache.get(s))
+            .collect()
+    };
+    let root_pids = patchset(root);
+    let mut result: BTreeSet<&str> = BTreeSet::from([root]);
+    // b is stacked on root iff it carries all of root's changes (content, not sha).
+    for b in &locals {
+        if b != root && !root_pids.is_empty() && root_pids.is_subset(&patchset(b)) {
+            result.insert(b);
+        }
+    }
+    Ok(result.into_iter().map(String::from).collect())
+}
 
-    bail!("no branches given; pass branch name(s) or --prefix")
+/// Exactly the branches named, deduped, caller order kept.
+pub fn explicit(branches: &[String], repo: &RepoView) -> Result<Vec<String>> {
+    let mut seen = BTreeSet::new();
+    let mut names = Vec::new();
+    for b in branches {
+        if !repo.branch_exists(b) {
+            bail!("branch '{b}' does not exist");
+        }
+        if seen.insert(b.as_str()) {
+            names.push(b.clone());
+        }
+    }
+    Ok(names)
 }
 
 #[cfg(test)]

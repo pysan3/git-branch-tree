@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 
+use crate::input::InputMode;
 use crate::suffix::{SuffixConfig, SuffixTemplate};
 
 /// Which tree rendering(s) to print.
@@ -76,7 +77,7 @@ pub struct Cli {
 
     /// analyse all local branches with any of these prefixes
     /// (e.g. --prefix PROJ-12{3..5})
-    #[arg(long, num_args = 1.., value_name = "PREFIX")]
+    #[arg(long, num_args = 1.., value_name = "PREFIX", conflicts_with = "branches")]
     pub prefix: Vec<String>,
 
     /// match --prefix by leading-letter group only, so 'PROJ-123', 'ABC-7' and
@@ -163,6 +164,24 @@ pub struct Cli {
 }
 
 impl Cli {
+    /// Which input mode the flags select.
+    ///
+    /// clap has already refused the combinations that conflict, so the only judgement
+    /// left here is what "nothing at all" means.
+    pub fn input_mode(&self) -> anyhow::Result<InputMode<'_>> {
+        if !self.prefix.is_empty() {
+            return Ok(InputMode::Prefix {
+                prefixes: &self.prefix,
+                alpha: self.alpha,
+            });
+        }
+        match self.branches.len() {
+            0 => anyhow::bail!("no branches given; pass branch name(s) or --prefix"),
+            1 => Ok(InputMode::StackedOn(&self.branches[0])),
+            _ => Ok(InputMode::Explicit(&self.branches)),
+        }
+    }
+
     /// At least one worker, however the flag was given.
     pub fn job_count(&self) -> usize {
         self.jobs.max(1)
@@ -243,6 +262,47 @@ mod tests {
         assert_eq!(parse(&["-j", "16", "x"]).test_job_count(), 1);
         assert_eq!(parse(&["--test-jobs", "4", "x"]).test_job_count(), 4);
         assert_eq!(parse(&["--test-jobs", "0", "x"]).test_job_count(), 1);
+    }
+
+    #[test]
+    fn input_mode_follows_the_flags() {
+        assert!(matches!(
+            parse(&["--prefix", "PROJ-1"]).input_mode().unwrap(),
+            InputMode::Prefix { alpha: false, .. }
+        ));
+        assert!(matches!(
+            parse(&["--alpha", "--prefix", "PROJ-1"])
+                .input_mode()
+                .unwrap(),
+            InputMode::Prefix { alpha: true, .. }
+        ));
+        // One branch means "this and everything stacked on it"; several mean exactly those.
+        assert!(matches!(
+            parse(&["feat/a"]).input_mode().unwrap(),
+            InputMode::StackedOn("feat/a")
+        ));
+        assert!(matches!(
+            parse(&["feat/a", "feat/b"]).input_mode().unwrap(),
+            InputMode::Explicit(_)
+        ));
+        assert_eq!(
+            parse(&[]).input_mode().unwrap_err().to_string(),
+            "no branches given; pass branch name(s) or --prefix"
+        );
+    }
+
+    #[test]
+    fn prefix_and_branch_arguments_cannot_be_combined() {
+        // This used to be silently reconciled in favour of --prefix, so the run analysed
+        // a different set of branches than the command line named.
+        assert!(Cli::try_parse_from(["git-branch-tree", "feat/a", "--prefix", "PROJ-1"]).is_err());
+
+        // The other ordering never reached that conflict and still does not: --prefix
+        // takes 1.. values, so a trailing word is one more prefix, not a branch. It ends
+        // in "no local branches match prefix(es): PROJ-1, feat/a", which says so.
+        let cli = parse(&["--prefix", "PROJ-1", "feat/a"]);
+        assert_eq!(cli.prefix, vec!["PROJ-1", "feat/a"]);
+        assert!(cli.branches.is_empty());
     }
 
     #[test]

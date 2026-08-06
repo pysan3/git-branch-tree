@@ -52,15 +52,7 @@ pub fn run(cli: Cli) -> Result<()> {
     let base_sha = repo.rev_parse(&base)?;
 
     let mut merged = cli.merged_names();
-    let names = resolve_branches(
-        &cli.branches,
-        &cli.prefix,
-        cli.alpha,
-        base_sha,
-        &repo,
-        &cache,
-        &pool,
-    )?;
+    let names = resolve_branches(cli.input_mode()?, base_sha, &repo, &cache, &pool)?;
 
     // Ask GitHub before building the graph, so a network failure costs nothing.
     let mut auto: Vec<String> = Vec::new();
