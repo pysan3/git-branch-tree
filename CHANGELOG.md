@@ -12,6 +12,12 @@ them by hand.
 
 ## [Unreleased]
 
+## [1.1.0](https://github.com/pysan3/git-branch-tree/compare/v1.0.2...v1.1.0) - 2026-08-06
+
+### Added
+
+- add --from-gh-stack to read the branch list from gh stack ([#22](https://github.com/pysan3/git-branch-tree/pull/22))
+
 ## [1.0.2](https://github.com/pysan3/git-branch-tree/compare/v1.0.1...v1.0.2) - 2026-08-06
 
 ### Fixed
