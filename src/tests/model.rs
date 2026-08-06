@@ -1,6 +1,6 @@
 //! Branch model construction and input-mode resolution against real repositories.
 
-use crate::input::resolve_branches;
+use crate::input::{by_prefix, explicit, stacked_on};
 use crate::model::{BranchSet, build_branches};
 use crate::testfix::{Harness as Ctx, TestRepo, disjoint_stack as linear_stack};
 
@@ -99,16 +99,7 @@ fn single_branch_discovers_everything_stacked_on_it_by_content() {
 
     let c = ctx(&r);
     let base = c.repo.rev_parse("main").unwrap();
-    let got = resolve_branches(
-        &names(&["feat/a"]),
-        &[],
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap();
+    let got = stacked_on("feat/a", base, &c.repo, &c.cache, &c.pool).unwrap();
     assert_eq!(got, vec!["feat/a", "feat/b", "feat/c"]);
 }
 
@@ -127,16 +118,7 @@ fn stacked_on_discovery_survives_a_rebase() {
 
     let c = ctx(&r);
     let base = c.repo.rev_parse("main").unwrap();
-    let got = resolve_branches(
-        &names(&["feat/a"]),
-        &[],
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap();
+    let got = stacked_on("feat/a", base, &c.repo, &c.cache, &c.pool).unwrap();
     assert_eq!(got, vec!["feat/a", "feat/b", "feat/c"]);
 }
 
@@ -151,45 +133,17 @@ fn prefix_mode_selects_matching_local_branches() {
     r.checkout("main");
 
     let c = ctx(&r);
-    let base = c.repo.rev_parse("main").unwrap();
 
     // Literal prefix.
-    let got = resolve_branches(
-        &[],
-        &names(&["PROJ-412"]),
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap();
+    let got = by_prefix(&c.repo, &names(&["PROJ-412"]), false).unwrap();
     assert_eq!(got, vec!["PROJ-412/one"]);
 
     // --alpha widens to the leading-letter group, so both PROJ tickets match.
-    let got = resolve_branches(
-        &[],
-        &names(&["PROJ-412"]),
-        true,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap();
+    let got = by_prefix(&c.repo, &names(&["PROJ-412"]), true).unwrap();
     assert_eq!(got, vec!["PROJ-412/one", "PROJ-500/two"]);
 
     // A prefix matching nothing is an error rather than an empty report.
-    let err = resolve_branches(
-        &[],
-        &names(&["NOPE"]),
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap_err();
+    let err = by_prefix(&c.repo, &names(&["NOPE"]), false).unwrap_err();
     assert!(err.to_string().contains("no local branches match"));
 }
 
@@ -197,29 +151,10 @@ fn prefix_mode_selects_matching_local_branches() {
 fn explicit_list_is_kept_in_order_and_deduped() {
     let r = linear_stack();
     let c = ctx(&r);
-    let base = c.repo.rev_parse("main").unwrap();
 
-    let got = resolve_branches(
-        &names(&["feat/c", "feat/a", "feat/c"]),
-        &[],
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap();
+    let got = explicit(&names(&["feat/c", "feat/a", "feat/c"]), &c.repo).unwrap();
     assert_eq!(got, vec!["feat/c", "feat/a"]);
 
-    let err = resolve_branches(
-        &names(&["feat/a", "ghost"]),
-        &[],
-        false,
-        base,
-        &c.repo,
-        &c.cache,
-        &c.pool,
-    )
-    .unwrap_err();
+    let err = explicit(&names(&["feat/a", "ghost"]), &c.repo).unwrap_err();
     assert_eq!(err.to_string(), "branch 'ghost' does not exist");
 }
