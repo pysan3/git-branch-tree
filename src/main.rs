@@ -29,6 +29,7 @@ mod patchid;
 mod plan;
 mod preflight;
 mod render;
+mod stacks;
 mod suffix;
 mod testrun;
 mod util;

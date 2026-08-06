@@ -137,7 +137,15 @@ git-branch-tree --prefix PROJ-123
 
 # ...or the whole ticket family, by leading-letter group
 git-branch-tree --alpha --prefix PROJ-123
+
+# already using GitHub's stacked PRs? take the branch list from there
+git-branch-tree --from-gh-stack
 ```
+
+`--from-gh-stack` reads the current stack with `gh stack view --short` and takes its
+**branch set only** — never the order or bases it declares. Those are exactly the
+hypothesis this tool exists to test, so trusting them would be circular; the graph is
+still derived from your code.
 
 Output is Mermaid by default (paste it into a PR description and GitHub renders the
 graph); `--format ascii` prints the tree above, `--format both` prints both.
@@ -201,6 +209,7 @@ depended only on them is repointed at the base.
 | `<branch>...` | One branch (plus everything stacked on it), or several exact branches |
 | `--prefix <P>...` | Every local branch matching any prefix |
 | `--alpha` | With `--prefix`, match by leading-letter group (`PROJ-123` → every `PROJ-*`) |
+| `--from-gh-stack` | Take the branch list from the current `gh stack` (its branch set only, never its edges) |
 | `--base <ref>` | Base branch (default: auto-detect via `origin/HEAD`, then `main`/`master`) |
 | `--merged <B>...` | Branches already squash-merged into the base (space- or comma-separated) |
 | `--auto-merged` | Also treat as merged any branch whose GitHub PR has merged (needs `gh`) |
