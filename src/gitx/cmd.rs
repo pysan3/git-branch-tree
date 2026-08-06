@@ -1,5 +1,7 @@
 //! Subprocess façade for the operations no crate covers faithfully: bounded blame,
-//! worktrees, rebase --onto, fetch/pull, and the `gh` CLI.
+//! worktrees, rebase --onto, fetch/pull, and the external CLIs (`gh`, and the stack
+//! tools). Every child process the crate spawns goes through here, so one place decides
+//! how a failing command renders.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -119,20 +121,39 @@ impl Git {
             .is_ok_and(|s| s.success())
     }
 
+    /// Run an arbitrary external program in the repo directory and return its trimmed
+    /// stdout.
+    ///
+    /// `env` is applied to the child only. Setting it on this process instead would race
+    /// the test threads that share one environment. It exists for tools that page or
+    /// colour their output, which a parser must not see.
+    ///
+    /// The not-found message names only what is missing: which flag wanted it, and what
+    /// to install, belong to the caller, and preflight already reports both.
+    pub fn tool(
+        &self,
+        program: &str,
+        args: &[&str],
+        env: &[(&str, &str)],
+    ) -> anyhow::Result<String> {
+        let mut cmd = Command::new(program);
+        cmd.args(args).current_dir(&self.dir);
+        for (key, value) in env {
+            cmd.env(key, value);
+        }
+        let out = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                anyhow::anyhow!("{program} not found on PATH")
+            } else {
+                anyhow::Error::from(spawn_error(program, args, &e))
+            }
+        })?;
+        Ok(collect(program, args, &out.status, out.stdout, out.stderr)?)
+    }
+
     /// Run `gh <args>` (GitHub CLI) and return its trimmed stdout.
     pub fn gh(&self, args: &[&str]) -> anyhow::Result<String> {
-        let out = Command::new("gh")
-            .args(args)
-            .current_dir(&self.dir)
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    anyhow::anyhow!("gh (GitHub CLI) not found; install it or omit --auto-merged")
-                } else {
-                    anyhow::Error::from(spawn_error("gh", args, &e))
-                }
-            })?;
-        Ok(collect("gh", args, &out.status, out.stdout, out.stderr)?)
+        self.tool("gh", args, &[])
     }
 }
 
