@@ -14,9 +14,22 @@ use std::collections::HashSet;
 use anyhow::{Context, Result, bail};
 
 use crate::gitx::Git;
+use crate::suffix::SuffixPreset;
 use crate::util::{note, warn};
 
 pub mod gh;
+pub mod gt;
+
+/// How much of a tool's output can be trusted to be branch names.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Parsing {
+    /// One branch name per line and nothing else. A name that is not a local branch is
+    /// the user's situation - a branch deleted locally - and worth saying out loud.
+    Exact,
+    /// A drawn tree that names are salvaged from. Lines that do not survive belong to
+    /// the renderer rather than the user, so they go without comment.
+    Rendered,
+}
 
 /// Everything about a tool that is data rather than behaviour.
 ///
@@ -39,6 +52,10 @@ pub struct Spec {
     pub env: &'static [(&'static str, &'static str)],
     /// The remedy half of the preflight message; the caller appends ", or drop <flag>".
     pub install: &'static str,
+    /// Whether a name this repository does not have is worth mentioning.
+    pub parsing: Parsing,
+    /// Suffix templates this tool wants in place of the crate's defaults.
+    pub suffix: SuffixPreset,
 }
 
 pub trait StackTool: Sync + std::fmt::Debug {
@@ -53,7 +70,7 @@ pub trait StackTool: Sync + std::fmt::Debug {
 }
 
 /// The tools this build knows about. Nothing else enumerates them.
-pub const TOOLS: &[&'static dyn StackTool] = &[&gh::GhStack];
+pub const TOOLS: &[&'static dyn StackTool] = &[&gh::GhStack, &gt::GtStack];
 
 /// The tool a flag selects. `None` means the CLI and this registry disagree, which is a
 /// bug here rather than anything the user typed.
@@ -93,9 +110,10 @@ pub fn branches(tool: &dyn StackTool, git: &Git, locals: &[String]) -> Result<Ve
             dropped.join(", ")
         );
     }
-    if !dropped.is_empty() {
+    if spec.parsing == Parsing::Exact && !dropped.is_empty() {
         // Not fatal: a branch deleted locally but still in the stack should not sink the
-        // whole run.
+        // whole run. Only worth saying for a tool that lists names and nothing else - in
+        // a drawn tree the leftovers are box-drawing, which the user did not write.
         warn(&format!(
             "{}: not a local branch, skipped: {}",
             spec.flag,

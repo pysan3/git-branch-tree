@@ -11,7 +11,7 @@ mod common;
 
 use std::path::{Path, PathBuf};
 
-use common::{Gbt, TestRepo, line_edit_chain};
+use common::{Gbt, TestRepo, disjoint_stack, line_edit_chain};
 
 /// A working `gh` with the stack extension: `gh stack --help` succeeds (preflight) and
 /// `gh stack view --short` lists two of the three branches in the fixture.
@@ -233,6 +233,127 @@ fn exactly_one_listing_command_is_issued() {
     assert_eq!(calls, vec!["stack --help", "stack view --short"]);
 }
 
+/// A working `gt` drawing the fixture's chain, in the real 1.8.6 shape. Note it must
+/// answer `log short --stack`: plain `log short` lists every tracked branch in the repo.
+const GT_STACK_AB: &str = r#"case "$*" in
+  --version) echo "1.8.6" ;;
+  "log short --stack") printf '\342\227\257  feat/b\n\342\227\257  feat/a\n\342\227\257  main\n' ;;
+  *) exit 1 ;;
+esac"#;
+
+/// Records argv, so the test can prove `--stack` is actually passed.
+const GT_RECORD_ARGV: &str = r#"echo "$*" >> "$GBT_ARGV_LOG"
+case "$*" in
+  --version) echo "1.8.6" ;;
+  "log short --stack") printf '\342\227\257  feat/b\n\342\227\257  feat/a\n\342\227\257  main\n' ;;
+esac"#;
+
+fn stub_gt(r: &TestRepo, body: &str) -> PathBuf {
+    let bin = r.dir.join("gtbin");
+    std::fs::create_dir_all(&bin).unwrap();
+    write_exe(&bin.join("gt"), &format!("#!/bin/sh\n{body}\n"));
+    bin
+}
+
+#[test]
+fn a_graphite_stack_supplies_the_branch_list_without_its_trunk() {
+    let r = line_edit_chain();
+    let bin = stub_gt(&r, GT_STACK_AB);
+
+    let (stdout, stderr) = Gbt::new(&r)
+        .env("PATH", path_with(&bin))
+        .args(&["--format", "ascii", "--from-gt-stack"])
+        .output();
+
+    // gt draws the trunk as the root of the tree; analysing it would make the base a
+    // node depending on itself. Its own order is kept, which is tip-first.
+    assert!(
+        stdout.contains("# branches (2): feat/b, feat/a"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("# branches (3)"), "{stdout}");
+    assert!(
+        stderr.contains("--from-gt-stack: 3 branch(es) from `gt log short --stack`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn graphite_defaults_the_suffix_for_a_branch_landing_on_a_parent() {
+    // feat/b really does depend on feat/a in this fixture, so it lands on a parent.
+    let r = line_edit_chain();
+    let bin = stub_gt(&r, GT_STACK_AB);
+
+    let stdout = Gbt::new(&r)
+        .env("PATH", path_with(&bin))
+        .args(&["--format", "ascii", "--from-gt-stack"])
+        .stdout();
+
+    assert!(stdout.contains("&& gt track --parent feat/a"), "{stdout}");
+    // The crate default must be gone: gt retargets PR bases itself on `gt submit`, so
+    // leaving `gh pr edit --base` in would have two tools writing the same field.
+    assert!(!stdout.contains("gh pr edit"), "{stdout}");
+}
+
+#[test]
+fn graphite_defaults_the_suffix_for_a_branch_landing_on_the_base() {
+    // Disjoint work: feat/b is stacked on feat/a in git but depends on nothing, so it
+    // is flattened onto the base - the case the --on-base side of the preset covers.
+    let r = disjoint_stack();
+    let bin = stub_gt(&r, GT_STACK_AB);
+
+    let stdout = Gbt::new(&r)
+        .env("PATH", path_with(&bin))
+        .args(&["--format", "ascii", "--from-gt-stack"])
+        .stdout();
+
+    assert!(stdout.contains("&& gt track --parent main"), "{stdout}");
+    assert!(!stdout.contains("review"), "{stdout}");
+}
+
+#[test]
+fn an_explicit_suffix_flag_still_beats_the_preset() {
+    let r = disjoint_stack();
+    let bin = stub_gt(&r, GT_STACK_AB);
+
+    let stdout = Gbt::new(&r)
+        .env("PATH", path_with(&bin))
+        .args(&[
+            "--format",
+            "ascii",
+            "--from-gt-stack",
+            "--on-base",
+            "echo {branch}",
+        ])
+        .stdout();
+
+    assert!(stdout.contains("&& echo feat/b"), "{stdout}");
+    // Only the side that was given is overridden; the preset still owns the other.
+    assert!(!stdout.contains("gt track --parent main"), "{stdout}");
+}
+
+#[test]
+fn the_graphite_listing_is_scoped_to_the_current_stack() {
+    // Without --stack, `gt log short` lists every tracked branch in the repository, so
+    // an unrelated ticket's stack would be dragged into the analysis.
+    let r = line_edit_chain();
+    let bin = stub_gt(&r, GT_RECORD_ARGV);
+    let log = r.dir.join("gt-argv.log");
+
+    Gbt::new(&r)
+        .env("PATH", path_with(&bin))
+        .env("GBT_ARGV_LOG", log.to_str().unwrap())
+        .args(&["--format", "ascii", "--from-gt-stack"])
+        .stdout();
+
+    let calls: Vec<String> = std::fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    assert_eq!(calls, vec!["--version", "log short --stack"]);
+}
+
 #[test]
 fn the_flag_cannot_be_combined_with_the_other_input_modes() {
     let r = line_edit_chain();
@@ -240,4 +361,6 @@ fn the_flag_cannot_be_combined_with_the_other_input_modes() {
 
     gbt(&r, &bin, &["--from-gh-stack", "--prefix", "feat"]).any_failure();
     gbt(&r, &bin, &["feat/a", "--from-gh-stack"]).any_failure();
+    // The two tools disagree about what a stack is, so asking both is a mistake.
+    gbt(&r, &bin, &["--from-gh-stack", "--from-gt-stack"]).any_failure();
 }

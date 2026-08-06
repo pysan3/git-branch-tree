@@ -116,6 +116,23 @@ pub struct SuffixConfig {
     pub on_parent: Vec<SuffixTemplate>,
 }
 
+/// Defaults a stack tool wants in place of the crate's own, one side at a time.
+///
+/// `None` means "keep the crate default", which is not the same as `Some("")` - that
+/// would mean "append nothing", and no tool has a reason to say it.
+#[derive(Debug, Clone, Copy)]
+pub struct SuffixPreset {
+    pub on_base: Option<&'static str>,
+    pub on_parent: Option<&'static str>,
+}
+
+impl SuffixPreset {
+    pub const NONE: Self = Self {
+        on_base: None,
+        on_parent: None,
+    };
+}
+
 /// The suffix appended to a branch landing on the base: it is ready to ship.
 pub const DEFAULT_ON_BASE: &str = "review";
 /// The suffix for a branch landing on a parent: a stacked PR whose GitHub base branch
@@ -123,27 +140,37 @@ pub const DEFAULT_ON_BASE: &str = "review";
 pub const DEFAULT_ON_PARENT: &str = "gh pr edit {branch} --base {onto}";
 
 impl SuffixConfig {
-    /// Build from CLI values. Giving a flag replaces its default entirely rather than
-    /// adding to it, so a user can shrink the chain as well as grow it; passing a
-    /// single empty value emits no suffix at all.
+    /// Build from CLI values, with a stack tool's preset as the middle layer.
+    ///
+    /// Three sources, most specific first: the flag the user passed, the preset the
+    /// selected tool asks for, then the crate default. Each side is decided on its own,
+    /// so `--from-gt-stack --on-base 'x'` still gets gt's `--on-parent`.
+    ///
+    /// Giving a flag replaces rather than extends, so a user can shrink the chain as
+    /// well as grow it; a single empty value emits no suffix at all. An explicit empty
+    /// flag therefore beats a preset, which is right - it is the more deliberate of the
+    /// two statements.
     pub fn from_cli(
         on_base: Option<&[SuffixTemplate]>,
         on_parent: Option<&[SuffixTemplate]>,
+        preset: SuffixPreset,
     ) -> Result<Self> {
-        let given =
-            |vals: Option<&[SuffixTemplate]>, default: &str| -> Result<Vec<SuffixTemplate>> {
-                match vals {
-                    Some(vals) => Ok(vals
-                        .iter()
-                        .filter(|t| !t.raw().is_empty())
-                        .cloned()
-                        .collect()),
-                    None => Ok(vec![SuffixTemplate::parse(default)?]),
-                }
-            };
+        let pick = |vals: Option<&[SuffixTemplate]>,
+                    preset: Option<&str>,
+                    default: &str|
+         -> Result<Vec<SuffixTemplate>> {
+            match vals {
+                Some(vals) => Ok(vals
+                    .iter()
+                    .filter(|t| !t.raw().is_empty())
+                    .cloned()
+                    .collect()),
+                None => Ok(vec![SuffixTemplate::parse(preset.unwrap_or(default))?]),
+            }
+        };
         Ok(Self {
-            on_base: given(on_base, DEFAULT_ON_BASE)?,
-            on_parent: given(on_parent, DEFAULT_ON_PARENT)?,
+            on_base: pick(on_base, preset.on_base, DEFAULT_ON_BASE)?,
+            on_parent: pick(on_parent, preset.on_parent, DEFAULT_ON_PARENT)?,
         })
     }
 }
@@ -181,13 +208,13 @@ mod tests {
 
     #[test]
     fn defaults_and_disabling() {
-        let cfg = SuffixConfig::from_cli(None, None).unwrap();
+        let cfg = SuffixConfig::from_cli(None, None, SuffixPreset::NONE).unwrap();
         assert_eq!(cfg.on_base.len(), 1);
         assert_eq!(cfg.on_base[0].raw(), "review");
         assert_eq!(cfg.on_parent[0].raw(), "gh pr edit {branch} --base {onto}");
 
         let empty = [SuffixTemplate::parse("").unwrap()];
-        let cfg = SuffixConfig::from_cli(Some(&empty), Some(&empty)).unwrap();
+        let cfg = SuffixConfig::from_cli(Some(&empty), Some(&empty), SuffixPreset::NONE).unwrap();
         assert!(cfg.on_base.is_empty());
         assert!(cfg.on_parent.is_empty());
     }
@@ -198,11 +225,36 @@ mod tests {
             SuffixTemplate::parse("echo {branch}").unwrap(),
             SuffixTemplate::parse("notify {onto}").unwrap(),
         ];
-        let cfg = SuffixConfig::from_cli(Some(&mine), None).unwrap();
+        let cfg = SuffixConfig::from_cli(Some(&mine), None, SuffixPreset::NONE).unwrap();
         let raws: Vec<&str> = cfg.on_base.iter().map(SuffixTemplate::raw).collect();
         assert_eq!(raws, vec!["echo {branch}", "notify {onto}"]);
         // The other side keeps its default.
         assert_eq!(cfg.on_parent[0].raw(), DEFAULT_ON_PARENT);
+    }
+
+    #[test]
+    fn a_tool_preset_sits_between_the_flag_and_the_default() {
+        let preset = SuffixPreset {
+            on_base: Some("gt track --parent {base}"),
+            on_parent: Some("gt track --parent {onto}"),
+        };
+
+        // Nothing given: the preset replaces both defaults.
+        let cfg = SuffixConfig::from_cli(None, None, preset).unwrap();
+        assert_eq!(cfg.on_base[0].raw(), "gt track --parent {base}");
+        assert_eq!(cfg.on_parent[0].raw(), "gt track --parent {onto}");
+
+        // An explicit flag beats the preset, and only on the side it was given.
+        let mine = [SuffixTemplate::parse("echo {branch}").unwrap()];
+        let cfg = SuffixConfig::from_cli(Some(&mine), None, preset).unwrap();
+        assert_eq!(cfg.on_base[0].raw(), "echo {branch}");
+        assert_eq!(cfg.on_parent[0].raw(), "gt track --parent {onto}");
+
+        // Explicitly empty beats it too: it is the more deliberate statement.
+        let empty = [SuffixTemplate::parse("").unwrap()];
+        let cfg = SuffixConfig::from_cli(None, Some(&empty), preset).unwrap();
+        assert_eq!(cfg.on_base[0].raw(), "gt track --parent {base}");
+        assert!(cfg.on_parent.is_empty());
     }
 
     #[test]

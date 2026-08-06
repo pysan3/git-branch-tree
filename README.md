@@ -138,14 +138,20 @@ git-branch-tree --prefix PROJ-123
 # ...or the whole ticket family, by leading-letter group
 git-branch-tree --alpha --prefix PROJ-123
 
-# already using GitHub's stacked PRs? take the branch list from there
+# already using a stacking tool? take the branch list from it
 git-branch-tree --from-gh-stack
+git-branch-tree --from-gt-stack
 ```
 
-`--from-gh-stack` reads the current stack with `gh stack view --short` and takes its
-**branch set only** — never the order or bases it declares. Those are exactly the
+Both read the current stack — `gh stack view --short` and `gt log short --stack` — and
+take its **branch set only**, never the order or bases it declares. Those are exactly the
 hypothesis this tool exists to test, so trusting them would be circular; the graph is
 still derived from your code.
+
+`--from-gt-stack` additionally emits `gt track --parent` instead of the default
+`gh pr edit --base`, so Graphite learns the corrected tree. Graphite retargets PR bases
+itself on `gt submit`, so leaving `gh pr edit` in the chain would put two tools on the
+same field. Pass `--on-base`/`--on-parent` explicitly to override either side.
 
 Output is Mermaid by default (paste it into a PR description and GitHub renders the
 graph); `--format ascii` prints the tree above, `--format both` prints both.
@@ -210,6 +216,7 @@ depended only on them is repointed at the base.
 | `--prefix <P>...` | Every local branch matching any prefix |
 | `--alpha` | With `--prefix`, match by leading-letter group (`PROJ-123` → every `PROJ-*`) |
 | `--from-gh-stack` | Take the branch list from the current `gh stack` (its branch set only, never its edges) |
+| `--from-gt-stack` | The same for the current Graphite stack; also defaults the suffixes to `gt track --parent` |
 | `--base <ref>` | Base branch (default: auto-detect via `origin/HEAD`, then `main`/`master`) |
 | `--merged <B>...` | Branches already squash-merged into the base (space- or comma-separated) |
 | `--auto-merged` | Also treat as merged any branch whose GitHub PR has merged (needs `gh`) |
@@ -241,24 +248,23 @@ git-branch-tree --prefix PROJ-123 \
 
 Repeat a flag to chain several commands; pass an empty value to append nothing.
 
-### Handing the result to `gt` or `gh stack`
+### Handing the result back to `gt` or `gh stack`
 
-The corrected tree is worth more if your stacking tool adopts it. Graphite sets one
-parent per branch, so it drops straight into the templates:
+`--from-gt-stack` already does this for Graphite: it emits
+[`gt track --parent`](https://graphite.com/docs/track-branches) for every branch, so `gt`
+learns the corrected tree as the block runs. That works because the chain checks each
+branch out before its suffix, and emits branches dependencies-first — a parent is always
+tracked before the child naming it, which is what `gt track --parent` requires. Use the
+templates only to change it:
 
 ```sh
-git-branch-tree --prefix PROJ-123 \
-  --on-base   'gt track --parent {base}' \
-  --on-parent 'gt track --parent {onto}'
+git-branch-tree --from-gt-stack --on-base 'gt submit --no-interactive'
 ```
 
-The chain checks each branch out before its suffix runs, and emits branches
-dependencies-first — so a parent is always tracked before the child that names it, which
-is what [`gt track --parent`](https://graphite.com/docs/track-branches) requires.
-
-`gh stack` has no per-branch equivalent (`gh stack modify` is an interactive editor), but
-every root-to-leaf path in the printed tree is one stack: `gh stack init A B` adopts the
-`A → B` chain, and the branches that got flattened stay ordinary single PRs.
+`gh stack` has no per-branch equivalent — `gh stack modify` is an interactive editor — so
+there is nothing to emit. Instead, every root-to-leaf path in the printed tree is one
+stack: `gh stack init A B` adopts the `A → B` chain, and the branches that got flattened
+stay ordinary single PRs.
 
 ## The loop
 
