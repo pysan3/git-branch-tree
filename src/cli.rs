@@ -9,7 +9,7 @@ use clap::{Parser, ValueEnum};
 
 use crate::input::InputMode;
 use crate::stacks::{self, StackTool};
-use crate::suffix::{SuffixConfig, SuffixTemplate};
+use crate::suffix::{SuffixConfig, SuffixPreset, SuffixTemplate};
 
 /// Which tree rendering(s) to print.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -40,6 +40,8 @@ INPUT MODES
                                            PROJ-123 selects every PROJ-* branch
   git-branch-tree --from-gh-stack           the branches of the current `gh stack`,
                                            taking its branch set but never its edges
+  git-branch-tree --from-gt-stack           the same for the current Graphite stack;
+                                           also emits `gt track` instead of `gh pr edit`
 
 HOW IT WORKS
   1. Resolve the branches to analyse and a base branch (default: auto-detected
@@ -91,8 +93,14 @@ pub struct Cli {
     /// take the branch list from the current `gh stack` (GitHub's stacked-PR extension)
     /// instead of branch args or --prefix; only its branch set is used, never the order
     /// or bases it declares
-    #[arg(long, conflicts_with_all = ["branches", "prefix"])]
+    #[arg(long, conflicts_with_all = ["branches", "prefix", "from_gt_stack"])]
     pub from_gh_stack: bool,
+
+    /// take the branch list from the current Graphite stack (`gt log short --stack`);
+    /// also defaults the suffix commands to `gt track --parent ...`, so the flattened
+    /// branches stay tracked with their corrected parents
+    #[arg(long, conflicts_with_all = ["branches", "prefix", "from_gh_stack"])]
+    pub from_gt_stack: bool,
 
     /// build the tree from pure git ancestry instead of the content heuristics
     /// (exact when the branches are already cleanly stacked on each other)
@@ -180,10 +188,14 @@ impl Cli {
     /// registry, and `every_registered_tool_is_reachable_by_its_flag` fails if the two
     /// ever drift apart.
     pub fn stack_tool(&self) -> Option<&'static dyn StackTool> {
-        if !self.from_gh_stack {
+        let flag = if self.from_gh_stack {
+            "--from-gh-stack"
+        } else if self.from_gt_stack {
+            "--from-gt-stack"
+        } else {
             return None;
-        }
-        Some(stacks::by_flag("--from-gh-stack").expect("--from-gh-stack is a registered tool"))
+        };
+        Some(stacks::by_flag(flag).expect("every stack flag is a registered tool"))
     }
 
     /// Which input mode the flags select.
@@ -242,7 +254,10 @@ impl Cli {
     /// The per-branch suffix commands, defaults applied. Templates were already
     /// validated by clap, so this cannot fail on a bad placeholder.
     pub fn suffixes(&self) -> anyhow::Result<SuffixConfig> {
-        SuffixConfig::from_cli(self.on_base.as_deref(), self.on_parent.as_deref())
+        let preset = self
+            .stack_tool()
+            .map_or(SuffixPreset::NONE, |t| t.spec().suffix);
+        SuffixConfig::from_cli(self.on_base.as_deref(), self.on_parent.as_deref(), preset)
     }
 }
 

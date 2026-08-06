@@ -8,7 +8,8 @@
 //! `gh stack view` shows the *current* stack and takes no stack selector, so this only
 //! works from a branch that is in one.
 
-use super::{Spec, StackTool};
+use super::{Parsing, Spec, StackTool};
+use crate::suffix::SuffixPreset;
 
 #[derive(Debug)]
 pub struct GhStack;
@@ -24,6 +25,10 @@ static SPEC: Spec = Spec {
         ("GH_NO_UPDATE_NOTIFIER", "1"),
     ],
     install: "install it with `gh extension install github/gh-stack`",
+    parsing: Parsing::Exact,
+    // `gh stack` has no scriptable per-branch re-parent command, and the crate's default
+    // chain already ends in `gh pr edit --base`, which is the right thing here.
+    suffix: SuffixPreset::NONE,
 };
 
 impl StackTool for GhStack {
