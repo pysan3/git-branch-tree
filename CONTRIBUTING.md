@@ -70,6 +70,35 @@ Output is pinned byte for byte on purpose — the rebase block gets pasted into 
 a change to it is a change to what people run. If a change alters the report, that is a
 deliberate decision to state in the commit message, not incidental drift.
 
+### Contract tests
+
+`src/tests/contract_gt.rs` drives a **real `gt`** and asserts our parser reads what it
+actually prints. Everything else feeds the parser a string literal, which only proves it
+handles what we *believe* Graphite prints — so these cover the one failure this feature
+has that our own code cannot cause: Graphite ships a release, moves a glyph, and every
+other test stays green while `--from-gt-stack` quietly finds nothing.
+
+They are `#[ignore]`d, so `cargo test` skips them and prints why. With Graphite
+installed:
+
+```sh
+cargo test -- --ignored          # only these
+cargo test -- --include-ignored  # these and everything else
+```
+
+`#[ignore]` rather than skipping when `gt` is absent: a test that silently passes without
+the tool reports success having asserted nothing. They need no Graphite account and no
+network.
+
+CI runs them **weekly**, not per pull request (`.github/workflows/contract.yml`), and
+they are not part of the required `ci` check — the drift they watch for happens on
+Graphite's release schedule, so a path or diff trigger would miss it, and a Graphite
+release must never turn an unrelated pull request red.
+
+There is deliberately no equivalent for `gh stack`: that parser is `line.trim()`, and the
+intersection against the repository's own branches already turns a format change into a
+clear error rather than a wrong answer.
+
 ## Scope
 
 The tool derives structure from content and holds no state. Proposals that require

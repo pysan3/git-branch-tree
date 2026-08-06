@@ -1,0 +1,45 @@
+name: Contract
+
+# Deliberately NOT triggered by pull_request, and deliberately not part of the required
+# `ci` check. What this guards against is the *other* project changing - Graphite ships a
+# release and moves a glyph in `gt log short` - which happens on their schedule and shows
+# no diff on ours. A path filter would sit silent through exactly that. Weekly is soon
+# enough to hear about it, and a Graphite release must never turn an unrelated PR red.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gt:
+    name: gt parser contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      # Unpinned on purpose. Pinning would make the job stable and useless: the whole
+      # point is to find out when the current Graphite breaks our parser.
+      - name: Install Graphite
+        run: npm install -g @withgraphite/graphite-cli
+
+      - name: Configure git
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+          git config --global commit.gpgsign false
+
+      - name: Record the version under test
+        run: gt --version
+
+      # `--ignored` runs only the contract tests. They need no Graphite account and no
+      # network beyond the install above.
+      - run: cargo test --bin git-branch-tree -- --ignored

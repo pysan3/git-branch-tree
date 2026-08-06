@@ -6,6 +6,7 @@
 
 mod base;
 mod blame;
+mod contract_gt;
 mod deps_ancestry;
 mod deps_content;
 mod gitx;
