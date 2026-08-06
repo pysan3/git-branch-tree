@@ -12,6 +12,12 @@ them by hand.
 
 ## [Unreleased]
 
+## [1.0.1](https://github.com/pysan3/git-branch-tree/compare/v1.0.0...v1.0.1) - 2026-08-06
+
+### Other
+
+- restructure README around tool comparison ([#17](https://github.com/pysan3/git-branch-tree/pull/17))
+
 ## [1.0.0](https://github.com/pysan3/git-branch-tree/compare/v0.2.1...v1.0.0) - 2026-08-05
 
 The licence changes from MIT to **MPL-2.0** from this release onward. Versions up to and
