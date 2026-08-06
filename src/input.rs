@@ -4,9 +4,10 @@ use std::collections::BTreeSet;
 
 use anyhow::{Result, bail};
 
-use crate::gitx::{RepoView, Sha};
+use crate::gitx::{Git, RepoView, Sha};
 use crate::model::prime_names;
 use crate::patchid::{PatchId, PatchIdCache};
+use crate::stacks::{self, StackTool};
 
 /// Leading run of ASCII letters, e.g. `PROJ-412` -> `PROJ`, `pysan3/foo` -> `pysan`.
 pub fn alpha_key(s: &str) -> &str {
@@ -36,13 +37,16 @@ pub enum InputMode<'a> {
     Prefix { prefixes: &'a [String], alpha: bool },
     StackedOn(&'a str),
     Explicit(&'a [String]),
+    Tool(&'static dyn StackTool),
 }
 
 /// Resolve the concrete list of branch names to analyse.
 pub fn resolve_branches(
     mode: InputMode<'_>,
     base: Sha,
+    base_ref: &str,
     repo: &RepoView,
+    git: &Git,
     cache: &PatchIdCache,
     pool: &rayon::ThreadPool,
 ) -> Result<Vec<String>> {
@@ -50,7 +54,36 @@ pub fn resolve_branches(
         InputMode::Prefix { prefixes, alpha } => by_prefix(repo, prefixes, alpha),
         InputMode::StackedOn(root) => stacked_on(root, base, repo, cache, pool),
         InputMode::Explicit(names) => explicit(names, repo),
+        InputMode::Tool(tool) => from_tool(tool, base_ref, repo, git),
     }
+}
+
+/// The branches an external stack tool declares, minus the base.
+pub fn from_tool(
+    tool: &'static dyn StackTool,
+    base_ref: &str,
+    repo: &RepoView,
+    git: &Git,
+) -> Result<Vec<String>> {
+    let locals = repo.local_branches()?;
+    let named = stacks::branches(tool, git, &locals)?;
+    // A tool that draws its trunk as part of the stack would otherwise hand back the
+    // base as a branch to analyse, making it a node depending on itself. `detect_base`
+    // can answer `origin/master` where the tool prints `master`, so drop both spellings.
+    let base_short = base_ref.rsplit('/').next().unwrap_or(base_ref);
+    let mut seen = BTreeSet::new();
+    let names: Vec<String> = named
+        .into_iter()
+        .filter(|n| n != base_ref && n != base_short)
+        .filter(|n| seen.insert(n.clone()))
+        .collect();
+    if names.is_empty() {
+        bail!(
+            "{}: the stack holds nothing but the base branch ({base_ref})",
+            tool.spec().flag
+        );
+    }
+    Ok(names)
 }
 
 /// Every local branch matching any prefix (or `--alpha` leading-letter group).

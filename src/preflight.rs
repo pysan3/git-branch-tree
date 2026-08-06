@@ -14,6 +14,7 @@ use anyhow::{Result, bail};
 
 use crate::cli::Cli;
 use crate::gitx::Git;
+use crate::stacks::StackTool;
 use crate::util::warn;
 
 /// The oldest git with everything used here. `worktree list --porcelain` arrived in 2.7
@@ -40,6 +41,9 @@ pub fn check(cli: &Cli, git: &Git) -> Result<()> {
     }
     if cli.auto_merged {
         check_gh(git, &mut problems);
+    }
+    if let Some(tool) = cli.stack_tool() {
+        check_stack_tool(tool, git, &mut problems);
     }
     if let Some(patch) = &cli.test_patch {
         check_patch(patch, &mut problems);
@@ -118,6 +122,24 @@ fn check_gh(git: &Git, problems: &mut Vec<Problem>) {
             fix: "run `gh auth login`, or drop --auto-merged".into(),
         });
     }
+}
+
+/// The tool must be *usable*, not merely installed: `gh` runs fine without the stack
+/// extension and then fails on the one command we need, so each tool names its own probe.
+fn check_stack_tool(tool: &dyn StackTool, git: &Git, problems: &mut Vec<Problem>) {
+    let spec = tool.spec();
+    if git.tool(spec.program, spec.probe_args, spec.env).is_ok() {
+        return;
+    }
+    problems.push(Problem {
+        what: format!(
+            "{} needs `{} {}`, which was not found or did not run",
+            spec.flag,
+            spec.program,
+            spec.probe_args.join(" ")
+        ),
+        fix: format!("{}, or drop {}", spec.install, spec.flag),
+    });
 }
 
 fn check_patch(patch: &std::path::Path, problems: &mut Vec<Problem>) {

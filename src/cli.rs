@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 
 use crate::input::InputMode;
+use crate::stacks::{self, StackTool};
 use crate::suffix::{SuffixConfig, SuffixTemplate};
 
 /// Which tree rendering(s) to print.
@@ -37,6 +38,8 @@ INPUT MODES
   git-branch-tree --prefix PROJ-1 PROJ-2     several prefixes are unioned
   git-branch-tree --alpha --prefix PROJ-123 match the leading-letter group only, so
                                            PROJ-123 selects every PROJ-* branch
+  git-branch-tree --from-gh-stack           the branches of the current `gh stack`,
+                                           taking its branch set but never its edges
 
 HOW IT WORKS
   1. Resolve the branches to analyse and a base branch (default: auto-detected
@@ -84,6 +87,12 @@ pub struct Cli {
     /// 'alice/wip' select every PROJ-*, ABC-* and alice* branch
     #[arg(long)]
     pub alpha: bool,
+
+    /// take the branch list from the current `gh stack` (GitHub's stacked-PR extension)
+    /// instead of branch args or --prefix; only its branch set is used, never the order
+    /// or bases it declares
+    #[arg(long, conflicts_with_all = ["branches", "prefix"])]
+    pub from_gh_stack: bool,
 
     /// build the tree from pure git ancestry instead of the content heuristics
     /// (exact when the branches are already cleanly stacked on each other)
@@ -164,11 +173,27 @@ pub struct Cli {
 }
 
 impl Cli {
+    /// The stack tool selected, if any.
+    ///
+    /// The flags are spelled out here because clap's derive needs literal names, but
+    /// nothing else about a tool is known at this layer: the string is looked up in the
+    /// registry, and `every_registered_tool_is_reachable_by_its_flag` fails if the two
+    /// ever drift apart.
+    pub fn stack_tool(&self) -> Option<&'static dyn StackTool> {
+        if !self.from_gh_stack {
+            return None;
+        }
+        Some(stacks::by_flag("--from-gh-stack").expect("--from-gh-stack is a registered tool"))
+    }
+
     /// Which input mode the flags select.
     ///
     /// clap has already refused the combinations that conflict, so the only judgement
     /// left here is what "nothing at all" means.
     pub fn input_mode(&self) -> anyhow::Result<InputMode<'_>> {
+        if let Some(tool) = self.stack_tool() {
+            return Ok(InputMode::Tool(tool));
+        }
         if !self.prefix.is_empty() {
             return Ok(InputMode::Prefix {
                 prefixes: &self.prefix,
