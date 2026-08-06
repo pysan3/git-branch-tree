@@ -1,6 +1,6 @@
 [package]
 name = "git-branch-tree"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
 rust-version = "1.88" # let-chains
 description = "Compute the real dependency tree of stacked branches from content, not ancestry, and emit the exact rebase commands to un-flatten them"
