@@ -2,8 +2,10 @@
 
 **Write in a stack, review as a tree.**
 
-Compute the real dependency DAG of stacked branches from *content* — not ancestry — and
-get the exact rebase commands to un-flatten them. Survives rebases and squash-merges.
+For [stacked pull requests](https://docs.github.com/en/pull-requests/how-tos/stacked-pull-requests):
+finds which branches in a stack actually depend on each other — from code content, not
+branch ancestry — and rebases the rest onto the base so they can be reviewed and merged
+independently. Survives rebases and squash-merges.
 
 [![CI](https://github.com/pysan3/git-branch-tree/actions/workflows/ci.yml/badge.svg)](https://github.com/pysan3/git-branch-tree/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/git-branch-tree.svg)](https://crates.io/crates/git-branch-tree)
@@ -15,27 +17,17 @@ get the exact rebase commands to un-flatten them. Survives rebases and squash-me
 
 ## The problem
 
-You are working on four things at once. Naturally, you stack them:
+A git branch has one parent, so stacking work means piling each new branch onto the
+last one:
 
 ```
 main → A → B → C → D
 ```
 
-You had to. A git branch has exactly **one** parent, so the only way to keep working is
-to pile the next branch on the last one. But that line is a lie about your work. Say
-`A` adds an auth argument to a handler, `B` adds logging to that same handler, `C` tweaks
-some CSS, and `D` fixes a typo in the README. Only `B` actually needs `A`.
+That chain is the order you wrote things in, not what depends on what. If only `B`
+really needs `A`, `C` and `D` still can't be reviewed until `A` and `B` land first.
 
-Reviewers pay for that lie. `D` cannot be reviewed or merged until `A`, `B` and `C` land,
-even though it depends on none of them. One slow review blocks three ready changes.
-
-The obvious fix — "just rebase the independent ones onto main" — needs an answer to a
-question git will not give you: **which of these branches actually depend on each other?**
-Ancestry cannot tell you; it only records where you happened to branch from. And the
-moment something squash-merges, the landed commits get brand-new hashes, so even
-comparing commits stops working.
-
-`git-branch-tree` works it out from the code itself, after the fact:
+## Demo
 
 ```console
 $ git-branch-tree --format ascii A
@@ -55,16 +47,68 @@ true \
 && true
 ```
 
-It found the one real dependency — `B` on `A`, because `B` edits the line `A` wrote — and
-flattened the other two. Paste the block and `C` and `D` become independent PRs against
-`main`, reviewable immediately, while `B` stays stacked on `A` with its PR base retargeted
+`git-branch-tree` found the one real dependency (`B` on `A`, because `B` edits a line `A`
+wrote) and flattened the rest. Paste the block: `C` and `D` become independent PRs against
+`main`, reviewable right away, while `B` stays stacked on `A` with its PR base retargeted
 to match.
 
-> This is deliberately the *retroactive* counterpart to tools like
-> [Graphite](https://graphite.dev) or [ghstack](https://github.com/ezyang/ghstack), which
-> ask you to declare the structure up front and maintain it as you go. Here you keep
-> working the way git pushes you to — one branch on the last — and recover the real shape
-> afterwards, from the content.
+## How it compares
+
+Every other stacking tool asks you to **declare** the structure and then keeps it honest
+for you. `git-branch-tree` **derives** the structure you never declared — which is why it
+is the only one that can tell you a branch never needed its parent in the first place.
+
+|  | git-branch-tree | [GitHub Stacked PRs][d-ghs] | [Graphite][d-gt] | [ghstack][d-ez] |
+| --- | --- | --- | --- | --- |
+| Structure comes from | your diffs (patch-ids + blame) | the base branch you pick per PR | the branch you ran `gt create` on | your commit order |
+| Shape it can express | tree, multi-parent | [linear chain][d-ghs] | [tree][d-gtnav] | linear chain |
+| Finds branches that never needed their parent | **yes** | no | no | no |
+| Keeps the stack rebased as you work | no | [yes][d-ghcli] | [yes][d-gtre] | yes |
+| Opens and retargets the PRs | prints commands | yes | yes | yes |
+| Checks a branch really builds on the base | `--test` | no | no | no |
+| Stack state it keeps | none | local tracking + GitHub | Graphite metadata | `gh/<user>/N/*` branches |
+| Can print its stack for scripts | — | [`gh stack view --json`][d-ghcli], REST API | `gt log short`, text only | — |
+| Needs an account or service | no | GitHub | Graphite | no |
+
+[d-ghs]: https://docs.github.com/en/pull-requests/get-started/about-stacked-prs
+[d-ghcli]: https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands
+[d-gt]: https://graphite.com/docs/cli-overview
+[d-gtnav]: https://graphite.com/docs/navigate-stack
+[d-gtre]: https://graphite.com/docs/restack-branches
+[d-ez]: https://github.com/ezyang/ghstack
+
+**[GitHub Stacked PRs](https://docs.github.com/en/pull-requests/get-started/about-stacked-prs)**
+(`gh stack`, public preview since July 2026) — native, no third party, and reviewers see
+the stack in the GitHub UI. But a stack is strictly a chain: *"Each subsequent pull
+request targets the branch of the pull request below it."* You place each change by hand
+— *"Create a new branch when you start a different concern that depends on what you've
+built so far"* — and nothing ever re-examines that choice. Restructuring is
+[`gh stack modify`](https://docs.github.com/en/pull-requests/reference/stacked-prs-cli-commands),
+an interactive editor you drive yourself.
+
+**[Graphite](https://graphite.com/docs/cli-overview)** — the most capable of the four:
+stacks are real trees ([`gt up` prompts you when a branch has several children][d-gtnav]),
+`gt restack` cascades a parent's changes down, and it comes with a review UI and merge
+queue. Still, the tree is the one you built: adopting a branch git created means
+[telling it the parent yourself][d-gttrack] (`gt track`), and its automatic mode
+*"chooses the nearest ancestor"* — ancestry again, the thing that was wrong to begin
+with. Requires a Graphite account.
+
+**[ghstack](https://github.com/ezyang/ghstack)** — the strictest: *"Every commit in your
+local commit stack gets submitted into a separate pull request."* No dependency analysis
+at all, N commits always become N chained PRs, and it warns that *"You will NOT be able
+to merge these commits using the normal GitHub UI."*
+
+[d-gttrack]: https://graphite.com/docs/track-branches
+
+### And the honest case against this one
+
+It is a one-shot analyser, not a workflow. It will not create your PRs, will not keep
+your stack rebased while you work, and gives reviewers no stack UI — so if you want
+those, run one of the above and use `git-branch-tree` for the question they cannot
+answer. Its edges are heuristics over text, so a dependency with no textual overlap
+needs `--test` to catch. And un-flattening rewrites branches, which means force-pushing
+anything already under review.
 
 ## Install
 
@@ -98,9 +142,9 @@ git-branch-tree --alpha --prefix PROJ-123
 Output is Mermaid by default (paste it into a PR description and GitHub renders the
 graph); `--format ascii` prints the tree above, `--format both` prints both.
 
-## How it decides that B depends on A
+## How it works
 
-Three signals, none of which is ancestry:
+Three signals decide whether `B` depends on `A`, none of which is ancestry:
 
 1. **Patch-ids isolate each branch's own work.** `git patch-id` hashes a commit's *diff*,
    not its identity, so a change keeps the same id through a rebase, a cherry-pick or a
@@ -124,7 +168,7 @@ The resulting graph is transitively reduced, so each branch hangs off its *neare
 dependencies only. A branch may have several parents; Mermaid draws that directly, and
 the ASCII tree annotates it as `(also depends on: ...)`.
 
-### What it cannot see
+### What it can't see
 
 A dependency with no textual overlap — `D` calls a function `B` defines, and nothing
 conflicts. That is what `--test` is for: it performs the exact rebase it would emit, in a
@@ -187,6 +231,25 @@ git-branch-tree --prefix PROJ-123 \
 ```
 
 Repeat a flag to chain several commands; pass an empty value to append nothing.
+
+### Handing the result to `gt` or `gh stack`
+
+The corrected tree is worth more if your stacking tool adopts it. Graphite sets one
+parent per branch, so it drops straight into the templates:
+
+```sh
+git-branch-tree --prefix PROJ-123 \
+  --on-base   'gt track --parent {base}' \
+  --on-parent 'gt track --parent {onto}'
+```
+
+The chain checks each branch out before its suffix runs, and emits branches
+dependencies-first — so a parent is always tracked before the child that names it, which
+is what [`gt track --parent`](https://graphite.com/docs/track-branches) requires.
+
+`gh stack` has no per-branch equivalent (`gh stack modify` is an interactive editor), but
+every root-to-leaf path in the printed tree is one stack: `gh stack init A B` adopts the
+`A → B` chain, and the branches that got flattened stay ordinary single PRs.
 
 ## The loop
 
